@@ -1,0 +1,302 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    function signedIn() {
+      return request.auth != null;
+    }
+
+    function userExists(uid) {
+      return exists(/databases/$(database)/documents/users/$(uid));
+    }
+
+    function userDoc(uid) {
+      return get(/databases/$(database)/documents/users/$(uid));
+    }
+
+    function myFamilyId() {
+      return userExists(request.auth.uid)
+          && ('familyId' in userDoc(request.auth.uid).data)
+          && userDoc(request.auth.uid).data.familyId is string
+          && userDoc(request.auth.uid).data.familyId.size() > 0
+          ? userDoc(request.auth.uid).data.familyId
+          : null;
+    }
+
+    function sameFamily(otherUid) {
+      return signedIn()
+          && myFamilyId() != null
+          && userExists(otherUid)
+          && ('familyId' in userDoc(otherUid).data)
+          && userDoc(otherUid).data.familyId == myFamilyId();
+    }
+
+    function isFamilyAdmin() {
+      return signedIn()
+          && userExists(request.auth.uid)
+          && ('familyRole' in userDoc(request.auth.uid).data)
+          && userDoc(request.auth.uid).data.familyRole == 'admin';
+    }
+
+    function isVolunteerAccount() {
+      return signedIn()
+          && userExists(request.auth.uid)
+          && ('accountType' in userDoc(request.auth.uid).data)
+          && userDoc(request.auth.uid).data.accountType == 'volunteer';
+    }
+
+    function volunteerCatalogId() {
+      return userDoc(request.auth.uid).data.volunteerCatalogId;
+    }
+
+    function hasVolunteerLane() {
+      return signedIn()
+          && userExists(request.auth.uid)
+          && ('volunteerCatalogId' in userDoc(request.auth.uid).data)
+          && userDoc(request.auth.uid).data.volunteerCatalogId is string
+          && userDoc(request.auth.uid).data.volunteerCatalogId.size() > 0;
+    }
+
+    function isPublicVolunteerProfile() {
+      return 'accountType' in resource.data
+          && resource.data.accountType == 'volunteer';
+    }
+
+    function assignedVolunteerRequest() {
+      return hasVolunteerLane()
+          && (
+            (('volunteerId' in resource.data)
+                && resource.data.volunteerId == volunteerCatalogId())
+            || (('volunteerUid' in resource.data)
+                && resource.data.volunteerUid == request.auth.uid)
+          );
+    }
+
+    function volunteerRequestResponseKeysOnly() {
+      return request.resource.data.diff(resource.data).affectedKeys().hasOnly([
+        'status',
+        'updatedAt',
+        'volunteerUid',
+        'volunteerName',
+        'blockedStartAt',
+        'blockedEndAt',
+        'acceptedAt',
+        'counterScheduledAt',
+        'counterVolunteerUid',
+        'counterVolunteerName',
+        'counterProposedAt',
+      ]);
+    }
+
+    function joiningFamily() {
+      return !userExists(request.auth.uid)
+          || !('familyId' in resource.data)
+          || resource.data.familyId == null
+          || resource.data.familyId == '';
+    }
+
+    // Invite docs: creator can add during family setup; admins can manage later.
+    match /family_invites/{inviteCode} {
+      allow read: if signedIn();
+      allow create: if signedIn()
+          && request.resource.data.createdByUid == request.auth.uid;
+      allow update: if signedIn()
+          && resource.data.familyId == myFamilyId()
+          && isFamilyAdmin();
+    }
+
+    // Family doc: members read; creator can read before membership is written.
+    match /families/{familyId} {
+      allow read: if signedIn()
+          && (
+            myFamilyId() == familyId
+            || resource.data.createdByUid == request.auth.uid
+          );
+      allow create: if signedIn()
+          && request.resource.data.createdByUid == request.auth.uid;
+      allow update: if signedIn()
+          && myFamilyId() == familyId
+          && isFamilyAdmin();
+
+      function familyChatDoc(chatId) {
+        return get(/databases/$(database)/documents/families/$(familyId)/family_chats/$(chatId));
+      }
+
+      function isFamilyChatParticipant(chatId) {
+        return signedIn()
+            && request.auth.uid in familyChatDoc(chatId).data.participantUids;
+      }
+
+      match /family_chats/{chatId} {
+        allow read: if signedIn()
+            && myFamilyId() == familyId
+            && request.auth.uid in resource.data.participantUids;
+
+        allow create: if signedIn()
+            && myFamilyId() == familyId
+            && request.auth.uid in request.resource.data.participantUids
+            && request.resource.data.participantUids.size() == 2;
+
+        allow update: if signedIn()
+            && myFamilyId() == familyId
+            && request.auth.uid in resource.data.participantUids;
+
+        match /messages/{messageId} {
+          allow read: if signedIn()
+              && myFamilyId() == familyId
+              && isFamilyChatParticipant(chatId);
+
+          allow create: if signedIn()
+              && myFamilyId() == familyId
+              && isFamilyChatParticipant(chatId)
+              && request.resource.data.senderUid == request.auth.uid
+              && request.resource.data.text is string
+              && request.resource.data.text.size() > 0;
+        }
+      }
+    }
+
+    match /users/{userId} {
+      function volunteerSelfMaintenance() {
+        return hasVolunteerLane()
+            && request.auth.uid == userId
+            && request.resource.data.diff(resource.data).affectedKeys().hasOnly([
+              'volunteerAvailabilityBlocks',
+              'volunteerOnline',
+              'volunteerAvailabilitySchedule',
+              'volunteerAvailability',
+              'volunteerStats',
+              'displayName',
+              'email',
+              'volunteerCatalogId',
+              'accountType',
+              'profilePhotoUrl',
+            ]);
+      }
+
+      // Query-friendly: `where('familyId', isEqualTo: myFamilyId)` for family lists.
+      allow read: if signedIn()
+          && (
+            request.auth.uid == userId
+            || (
+              myFamilyId() != null
+              && ('familyId' in resource.data)
+              && resource.data.familyId == myFamilyId()
+            )
+            || isPublicVolunteerProfile()
+          );
+
+      allow create: if signedIn() && request.auth.uid == userId;
+
+      allow update: if signedIn()
+          && request.auth.uid == userId
+          && (
+            joiningFamily()
+            || (
+              ('familyId' in resource.data)
+              && ('familyId' in request.resource.data)
+              && resource.data.familyId == request.resource.data.familyId
+            )
+            || volunteerSelfMaintenance()
+          );
+
+      match /support_messages/{messageId} {
+        allow read, create: if signedIn() && request.auth.uid == userId;
+      }
+
+      match /support_conversations/{conversationId} {
+        allow read, create, update: if signedIn()
+            && request.auth.uid == userId;
+
+        match /messages/{messageId} {
+          allow read, create: if signedIn()
+              && request.auth.uid == userId;
+        }
+      }
+
+      match /daily_check_ins/{checkInId} {
+        allow read: if signedIn()
+            && (request.auth.uid == userId || sameFamily(userId));
+        allow create: if signedIn() && request.auth.uid == userId;
+      }
+
+      match /fcm_tokens/{tokenId} {
+        allow read, write, delete: if signedIn()
+            && request.auth.uid == userId;
+      }
+
+      match /notifications/{notificationId} {
+        allow read, update: if signedIn()
+            && request.auth.uid == userId;
+        // Debug builds only: app sets debugOnly == true for self-test rows.
+        allow create: if signedIn()
+            && request.auth.uid == userId
+            && request.resource.data.debugOnly == true
+            && request.resource.data.type == 'family_message';
+        allow delete: if false;
+      }
+
+      match /peer_group_requests/{groupId} {
+        allow read, create: if signedIn() && request.auth.uid == userId;
+      }
+
+      match /event_signups/{eventId} {
+        allow read, create: if signedIn() && request.auth.uid == userId;
+      }
+
+      match /volunteer_requests/{requestId} {
+        allow read, create: if signedIn() && request.auth.uid == userId;
+        // Owner can respond to counter proposals and manage their requests.
+        allow update: if signedIn() && request.auth.uid == userId;
+      }
+
+      match /volunteer_messages/{volunteerLaneId} {
+        allow read: if signedIn() && (
+          request.auth.uid == userId
+          || (isVolunteerAccount() && volunteerLaneId == volunteerCatalogId())
+        );
+        allow create, update: if signedIn() && (
+          request.auth.uid == userId
+          || (isVolunteerAccount() && volunteerLaneId == volunteerCatalogId())
+        );
+
+        match /messages/{messageId} {
+          allow read: if signedIn() && (
+            request.auth.uid == userId
+            || (isVolunteerAccount() && volunteerLaneId == volunteerCatalogId())
+          );
+          allow create: if signedIn() && (
+            (request.auth.uid == userId && request.resource.data.isUser == true)
+            || (
+              isVolunteerAccount()
+              && volunteerLaneId == volunteerCatalogId()
+              && request.resource.data.isUser == false
+              && request.resource.data.text is string
+              && request.resource.data.text.size() > 0
+            )
+          );
+        }
+      }
+    }
+
+    // App config readable by signed-in users (e.g. transport coverage ZIPs).
+    match /config/{docId} {
+      allow read: if signedIn();
+      allow write: if false;
+    }
+
+    // Volunteers read and respond to requests assigned to their lane.
+    match /{path=**}/volunteer_requests/{requestId} {
+      allow read: if signedIn() && assignedVolunteerRequest();
+      allow update: if signedIn()
+          && assignedVolunteerRequest()
+          && request.resource.data.status in [
+            'accepted',
+            'declined',
+            'completed',
+            'counter_proposed',
+          ]
+          && volunteerRequestResponseKeysOnly();
+    }
+  }
+}

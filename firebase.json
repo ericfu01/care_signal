@@ -1,0 +1,61 @@
+{
+  "flutter": {
+    "platforms": {
+      "android": {
+        "default": {
+          "projectId": "care-signal-ai",
+          "appId": "1:346805617084:android:6f1257f1c7344581ac6bb9",
+          "fileOutput": "android/app/google-services.json"
+        }
+      },
+      "ios": {
+        "default": {
+          "projectId": "care-signal-ai",
+          "appId": "1:346805617084:ios:b74ee5dcdc985947ac6bb9",
+          "uploadDebugSymbols": false,
+          "fileOutput": "ios/Runner/GoogleService-Info.plist"
+        }
+      },
+      "macos": {
+        "default": {
+          "projectId": "care-signal-ai",
+          "appId": "1:346805617084:ios:b74ee5dcdc985947ac6bb9",
+          "uploadDebugSymbols": false,
+          "fileOutput": "macos/Runner/GoogleService-Info.plist"
+        }
+      },
+      "dart": {
+        "lib/firebase_options.dart": {
+          "projectId": "care-signal-ai",
+          "configurations": {
+            "android": "1:346805617084:android:6f1257f1c7344581ac6bb9",
+            "ios": "1:346805617084:ios:b74ee5dcdc985947ac6bb9",
+            "macos": "1:346805617084:ios:b74ee5dcdc985947ac6bb9",
+            "web": "1:346805617084:web:613cf0f31a9620ddac6bb9",
+            "windows": "1:346805617084:web:af9a8456113dc35dac6bb9"
+          }
+        }
+      }
+    }
+  },
+  "firestore": {
+    "rules": "firestore.rules",
+    "indexes": "firestore.indexes.json"
+  },
+  "storage": {
+    "rules": "storage.rules"
+  },
+  "functions": [
+    {
+      "source": "functions",
+      "codebase": "default",
+      "ignore": [
+        "node_modules",
+        ".git",
+        "firebase-debug.log",
+        "firebase-debug.*.log",
+        "*.local"
+      ]
+    }
+  ]
+}
