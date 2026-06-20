@@ -466,7 +466,9 @@ class _HomePageState extends State<HomePage> {
 
     final XFile? pickedFile = await _imagePicker.pickImage(
       source: source,
-      imageQuality: 85,
+      imageQuality: 65,
+      maxWidth: 512,
+      maxHeight: 512,
     );
 
     if (pickedFile == null) return;
@@ -485,14 +487,21 @@ class _HomePageState extends State<HomePage> {
       if (!mounted) return;
       setState(() {
         _profilePhotoUrl = url;
-        _profilePhotoUploading = false;
+        _profileImageBytes = null;
       });
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Profile photo saved.')),
+      );
     } catch (e) {
       if (!mounted) return;
-      setState(() => _profilePhotoUploading = false);
+      setState(() => _profileImageBytes = null);
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text('Could not save profile photo: $e')),
       );
+    } finally {
+      if (mounted) {
+        setState(() => _profilePhotoUploading = false);
+      }
     }
   }
 

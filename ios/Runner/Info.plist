@@ -56,5 +56,9 @@
 		<string>fetch</string>
 		<string>remote-notification</string>
 	</array>
+	<key>NSPhotoLibraryUsageDescription</key>
+	<string>Care Signal uses your photo library so you can choose a profile picture.</string>
+	<key>NSCameraUsageDescription</key>
+	<string>Care Signal uses your camera so you can take a profile picture.</string>
 </dict>
 </plist>

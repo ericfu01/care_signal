@@ -5,10 +5,6 @@ service firebase.storage {
       return request.auth != null;
     }
 
-    function isOwner(userId) {
-      return signedIn() && request.auth.uid == userId;
-    }
-
     function sameFamilyAs(userId) {
       return signedIn()
           && firestore.get(/databases/(default)/documents/users/$(request.auth.uid)).data.familyId
@@ -18,12 +14,20 @@ service firebase.storage {
           && firestore.get(/databases/(default)/documents/users/$(request.auth.uid)).data.familyId.size() > 0;
     }
 
-    match /profile_photos/{userId}.jpg {
-      allow read: if isOwner(userId) || sameFamilyAs(userId);
-      allow write: if isOwner(userId)
-          && request.resource.size < 5 * 1024 * 1024
-          && request.resource.contentType.matches('image/.*');
-      allow delete: if isOwner(userId);
+    // Files are stored as profile_photos/{uid}.jpg (single path segment).
+    match /profile_photos/{fileName} {
+      function photoUid() {
+        return fileName.replace('.jpg', '');
+      }
+
+      function isOwnPhoto() {
+        return signedIn() && fileName == request.auth.uid + '.jpg';
+      }
+
+      allow read: if isOwnPhoto() || sameFamilyAs(photoUid());
+      allow write: if isOwnPhoto()
+          && request.resource.size < 5 * 1024 * 1024;
+      allow delete: if isOwnPhoto();
     }
   }
 }
