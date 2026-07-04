@@ -1,6 +1,5 @@
 const { onDocumentCreated, onDocumentUpdated } = require('firebase-functions/v2/firestore');
 const { onRequest, onCall, HttpsError } = require('firebase-functions/v2/https');
-const { defineSecret } = require('firebase-functions/params');
 const crypto = require('crypto');
 const { initializeApp } = require('firebase-admin/app');
 const { getFirestore, FieldValue, Timestamp } = require('firebase-admin/firestore');
@@ -14,10 +13,6 @@ const {
 } = require('./email');
 
 initializeApp();
-
-const sendgridApiKey = defineSecret('SENDGRID_API_KEY');
-const emailFrom = defineSecret('EMAIL_FROM');
-const emailSecrets = [sendgridApiKey, emailFrom];
 
 const ONLINE_WINDOW_MS = 3 * 60 * 1000;
 
@@ -1041,7 +1036,6 @@ exports.notifyPeerGroupCoHostInvite = onDocumentCreated(
   {
     document: 'users/{inviteeUid}/peer_group_cohost_invites/{groupId}',
     region: 'us-central1',
-    secrets: emailSecrets,
   },
   async (event) => {
     const snap = event.data;
@@ -1079,9 +1073,10 @@ exports.notifyPeerGroupCoHostInvite = onDocumentCreated(
         inviteeEmail,
         helpUrl,
       });
+      const emailConfig = await loadEmailConfig(db);
       await sendAppEmail({
-        apiKey: sendgridApiKey.value(),
-        from: emailFrom.value(),
+        apiKey: emailConfig.apiKey,
+        from: emailConfig.from,
         to: inviteeEmail,
         subject: mail.subject,
         text: mail.text,
@@ -1097,7 +1092,6 @@ exports.notifyPeerGroupFamilyInvite = onDocumentCreated(
   {
     document: 'peer_groups/{groupId}/invitations/{invitationId}',
     region: 'us-central1',
-    secrets: emailSecrets,
   },
   async (event) => {
     const snap = event.data;
@@ -1132,9 +1126,10 @@ exports.notifyPeerGroupFamilyInvite = onDocumentCreated(
         inviteeEmail,
         helpUrl,
       });
+      const emailConfig = await loadEmailConfig(db);
       await sendAppEmail({
-        apiKey: sendgridApiKey.value(),
-        from: emailFrom.value(),
+        apiKey: emailConfig.apiKey,
+        from: emailConfig.from,
         to: inviteeEmail,
         subject: mail.subject,
         text: mail.text,
@@ -1188,6 +1183,19 @@ async function loadInviteHelpUrl(db) {
   }
 }
 
+async function loadEmailConfig(db) {
+  try {
+    const snap = await db.doc('config/email').get();
+    const data = snap.data() || {};
+    return {
+      apiKey: (data.sendgridApiKey || '').trim(),
+      from: (data.emailFrom || '').trim(),
+    };
+  } catch (_) {
+    return { apiKey: '', from: '' };
+  }
+}
+
 async function assertStaffUser(db, uid) {
   const snap = await db.collection('users').doc(uid).get();
   if (!snap.exists || snap.data()?.accountType !== 'staff') {
@@ -1195,9 +1203,7 @@ async function assertStaffUser(db, uid) {
   }
 }
 
-exports.createStaffInvite = onCall(
-  { region: 'us-central1', secrets: emailSecrets },
-  async (request) => {
+exports.createStaffInvite = onCall({ region: 'us-central1' }, async (request) => {
     if (!request.auth) {
       throw new HttpsError('unauthenticated', 'Sign in to create staff invites.');
     }
@@ -1230,9 +1236,10 @@ exports.createStaffInvite = onCall(
         'The code expires in 7 days.',
       ];
       if (helpUrl) lines.push('', `Learn more: ${helpUrl}`);
+      const emailConfig = await loadEmailConfig(db);
       await sendAppEmail({
-        apiKey: sendgridApiKey.value(),
-        from: emailFrom.value(),
+        apiKey: emailConfig.apiKey,
+        from: emailConfig.from,
         to: boundEmail,
         subject: 'Care Signal staff access code',
         text: lines.join('\n'),
@@ -1240,8 +1247,7 @@ exports.createStaffInvite = onCall(
     }
 
     return { code };
-  },
-);
+});
 
 exports.redeemStaffInvite = onCall({ region: 'us-central1' }, async (request) => {
   if (!request.auth) {

@@ -1,21 +1,23 @@
 # Outbound email (peer group invites)
 
-Care Signal sends optional invitation emails through **SendGrid** when Cloud Functions secrets are configured.
+Care Signal sends optional invitation emails through **SendGrid** when `config/email` is set in Firestore.
 
 ## Setup
 
 1. Create a [SendGrid](https://sendgrid.com) account and verify a sender address (or domain).
 2. Create an API key with **Mail Send** permission.
-3. Store secrets in Firebase (replace values):
+3. In [Firestore Console](https://console.firebase.google.com/project/care-signal-ai/firestore), create document **`config/email`**:
 
-```bash
-firebase functions:secrets:set SENDGRID_API_KEY --project care-signal-ai
-firebase functions:secrets:set EMAIL_FROM --project care-signal-ai
+```json
+{
+  "sendgridApiKey": "SG.your-api-key",
+  "emailFrom": "support@yourdomain.com"
+}
 ```
 
-`EMAIL_FROM` must be a verified sender in SendGrid (e.g. `support@yourdomain.com`).
+`emailFrom` must be a verified sender in SendGrid.
 
-4. Redeploy functions that send mail:
+4. Redeploy functions:
 
 ```bash
 ./scripts/deploy-cloud-functions.sh
@@ -25,14 +27,13 @@ firebase functions:secrets:set EMAIL_FROM --project care-signal-ai
 
 | Event | Email | In-app |
 |-------|-------|--------|
-| Family peer group invite | Sent to invitee email (always, if configured) | If account exists |
+| Family peer group invite | Sent to invitee email (if configured) | If account exists |
 | Co-host invite | Sent to volunteer email (if configured) | Always |
+| Staff invite | Sent when email provided on Team tab | N/A |
 
-If secrets are missing, invites still work in-app; email is skipped with a log line in Cloud Functions.
+If `config/email` is missing, invites still work in-app; email is skipped with a log line in Cloud Functions.
 
-## Optional Firestore config
-
-`config/app` fields:
+## Optional app config (`config/app`)
 
 | Field | Purpose |
 |-------|---------|
@@ -47,3 +48,5 @@ Example:
   "inviteHelpUrl": "https://yourdomain.com/care-signal"
 }
 ```
+
+**Security:** `config/email` is not readable from the mobile app (Firestore rules deny client access). Only Cloud Functions read it via the Admin SDK.
