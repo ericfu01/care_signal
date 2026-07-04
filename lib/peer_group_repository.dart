@@ -1,7 +1,7 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:cloud_functions/cloud_functions.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 
-import 'account_type.dart';
 import 'family_models.dart';
 import 'peer_group_models.dart';
 
@@ -43,17 +43,23 @@ class PeerGroupRepository {
     final normalized = email.trim().toLowerCase();
     if (normalized.isEmpty) return null;
 
-    final snap = await FirebaseFirestore.instance
-        .collection('users')
-        .where('email', isEqualTo: normalized)
-        .where('accountType', isEqualTo: AccountType.volunteer)
-        .limit(1)
-        .get();
-    if (snap.docs.isEmpty) return null;
-
-    final profile = UserProfile.fromDoc(snap.docs.first);
-    if (!profile.backgroundCheckApproved) return null;
-    return profile;
+    try {
+      final callable = FirebaseFunctions.instance
+          .httpsCallable('resolveVolunteerByEmail');
+      final result = await callable.call<Map<String, dynamic>>({
+        'email': normalized,
+      });
+      final data = result.data;
+      if (data['found'] != true) return null;
+      final uid = data['uid'] as String?;
+      if (uid == null || uid.isEmpty) return null;
+      return UserProfile(
+        uid: uid,
+        displayName: (data['displayName'] as String?)?.trim() ?? 'Volunteer',
+      );
+    } catch (_) {
+      return null;
+    }
   }
 
   DocumentReference<Map<String, dynamic>> _coHostInviteRef(
@@ -278,25 +284,13 @@ class PeerGroupRepository {
     if (email.isEmpty) {
       throw StateError('Enter an email address to invite.');
     }
-    var resolvedUid = inviteeUid?.trim();
-    if (resolvedUid == null || resolvedUid.isEmpty) {
-      final match = await FirebaseFirestore.instance
-          .collection('users')
-          .where('email', isEqualTo: email)
-          .limit(1)
-          .get();
-      if (match.docs.isNotEmpty) {
-        resolvedUid = match.docs.first.id;
-      }
-    }
-    final invitationId =
-        resolvedUid != null && resolvedUid.isNotEmpty ? resolvedUid : email;
+    // Always key by email on the client; Cloud Functions resolve account UIDs.
+    final invitationId = email;
     await _groups.doc(groupId).collection('invitations').doc(invitationId).set({
       'groupId': groupId,
       'groupTitle': groupTitle,
       'inviteeEmail': email,
-      if (resolvedUid != null && resolvedUid.isNotEmpty)
-        'inviteeUid': resolvedUid,
+      if (inviteeUid != null && inviteeUid.isNotEmpty) 'inviteeUid': inviteeUid,
       'hostUid': hostUid,
       'status': 'pending',
       'createdAt': FieldValue.serverTimestamp(),

@@ -1310,6 +1310,41 @@ exports.redeemStaffInvite = onCall({ region: 'us-central1' }, async (request) =>
   return { ok: true };
 });
 
+exports.resolveVolunteerByEmail = onCall({ region: 'us-central1' }, async (request) => {
+  if (!request.auth) {
+    throw new HttpsError('unauthenticated', 'Sign in to look up volunteers.');
+  }
+
+  const email = (request.data?.email || '').trim().toLowerCase();
+  if (!email) {
+    throw new HttpsError('invalid-argument', 'Enter an email address.');
+  }
+
+  const db = getFirestore();
+  const snap = await db
+    .collection('users')
+    .where('email', '==', email)
+    .where('accountType', '==', 'volunteer')
+    .limit(1)
+    .get();
+
+  if (snap.empty) {
+    return { found: false };
+  }
+
+  const doc = snap.docs[0];
+  const data = doc.data() || {};
+  if (data.backgroundCheckStatus !== 'approved') {
+    return { found: false };
+  }
+
+  return {
+    found: true,
+    uid: doc.id,
+    displayName: (data.displayName || 'Volunteer').trim(),
+  };
+});
+
 async function findUserUidByEmail(db, email) {
   const normalized = (email || '').trim().toLowerCase();
   if (!normalized) return null;

@@ -24,6 +24,7 @@ functions:notifyPeerGroupCoHostInvite,\
 functions:notifyPeerGroupFamilyInvite,\
 functions:createStaffInvite,\
 functions:redeemStaffInvite,\
+functions:resolveVolunteerByEmail,\
 functions:deleteUserAccount,\
 functions:seedTransportCoverage \
   --project care-signal-ai
