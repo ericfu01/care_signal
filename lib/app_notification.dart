@@ -15,6 +15,8 @@ class AppNotification {
     this.otherDisplayName,
     this.familyUserId,
     this.requestId,
+    this.groupId,
+    this.requesterUid,
   });
 
   final String id;
@@ -29,6 +31,8 @@ class AppNotification {
   final String? otherDisplayName;
   final String? familyUserId;
   final String? requestId;
+  final String? groupId;
+  final String? requesterUid;
 
   bool get isFamilyMessage => type == 'family_message';
   bool get isVolunteerRequestCancelled =>
@@ -40,6 +44,9 @@ class AppNotification {
       type == 'family_request_completed' ||
       type == 'family_request_declined';
   bool get isFamilyRiskAlert => type == 'family_risk_alert';
+  bool get isPeerGroupJoinRequest => type == 'peer_group_join_request';
+  bool get isPeerGroupCoHostInvite => type == 'peer_group_cohost_invite';
+  bool get isPeerGroupFamilyInvite => type == 'peer_group_family_invite';
 
   factory AppNotification.fromDoc(DocumentSnapshot<Map<String, dynamic>> doc) {
     final data = doc.data() ?? {};
@@ -57,6 +64,8 @@ class AppNotification {
       otherDisplayName: data['otherDisplayName'] as String?,
       familyUserId: data['familyUserId'] as String?,
       requestId: data['requestId'] as String?,
+      groupId: data['groupId'] as String?,
+      requesterUid: data['requesterUid'] as String?,
     );
   }
 }

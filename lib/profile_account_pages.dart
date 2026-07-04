@@ -1,7 +1,14 @@
+import 'dart:async';
+
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
+import 'package:url_launcher/url_launcher.dart';
 
+import 'account_deletion_service.dart';
+import 'app_config_service.dart';
+import 'auth_gate.dart';
 import 'data_export_service.dart';
+import 'staff_repository.dart';
 
 class ExportDataPage extends StatefulWidget {
   const ExportDataPage({super.key});
@@ -135,8 +142,75 @@ class _ExportDataPageState extends State<ExportDataPage> {
   }
 }
 
-class HelpPage extends StatelessWidget {
+class HelpPage extends StatefulWidget {
   const HelpPage({super.key});
+
+  @override
+  State<HelpPage> createState() => _HelpPageState();
+}
+
+class _HelpPageState extends State<HelpPage> {
+  final _feedbackController = TextEditingController();
+  bool _sending = false;
+  String _supportEmail = AppConfig.defaultSupportEmail;
+
+  @override
+  void initState() {
+    super.initState();
+    unawaited(_loadSupportEmail());
+  }
+
+  Future<void> _loadSupportEmail() async {
+    final config = await AppConfigService.instance.loadConfig();
+    if (!mounted) return;
+    setState(() => _supportEmail = config.supportEmail);
+  }
+
+  @override
+  void dispose() {
+    _feedbackController.dispose();
+    super.dispose();
+  }
+
+  Future<void> _emailSupport() async {
+    final uri = Uri(
+      scheme: 'mailto',
+      path: _supportEmail,
+      queryParameters: {
+        'subject': 'Care Signal support',
+      },
+    );
+    if (!await launchUrl(uri)) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Email us at $_supportEmail')),
+      );
+    }
+  }
+
+  Future<void> _sendFeedback() async {
+    final message = _feedbackController.text.trim();
+    if (message.isEmpty) return;
+    setState(() => _sending = true);
+    try {
+      await StaffRepository.instance.submitFeedback(
+        message: message,
+        email: FirebaseAuth.instance.currentUser?.email,
+      );
+      if (!mounted) return;
+      _feedbackController.clear();
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Thanks — your feedback was sent.')),
+      );
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Could not send feedback: $e')),
+      );
+    } finally {
+      if (mounted) setState(() => _sending = false);
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -186,22 +260,114 @@ class HelpPage extends StatelessWidget {
           ),
           const SizedBox(height: 8),
           Text(
-            'Email care.signal.support@example.com with a short description '
-            'of the problem and your app version. We typically reply within '
-            'one business day.',
+            'Email $_supportEmail with a short description of the problem. '
+            'We typically reply within one business day.',
             style: Theme.of(context).textTheme.bodyMedium?.copyWith(height: 1.4),
           ),
-          const SizedBox(height: 28),
+          const SizedBox(height: 12),
           OutlinedButton.icon(
-            onPressed: () {
-              ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(
-                  content: Text('Feedback form is not connected yet.'),
+            onPressed: _emailSupport,
+            icon: const Icon(Icons.email_outlined),
+            label: const Text('Email support'),
+          ),
+          const SizedBox(height: 28),
+          Text(
+            'Send feedback',
+            style: Theme.of(context).textTheme.titleSmall?.copyWith(
+                  fontWeight: FontWeight.w600,
                 ),
-              );
-            },
+          ),
+          const SizedBox(height: 8),
+          TextField(
+            controller: _feedbackController,
+            decoration: const InputDecoration(
+              labelText: 'What can we improve?',
+              border: OutlineInputBorder(),
+            ),
+            minLines: 3,
+            maxLines: 5,
+          ),
+          const SizedBox(height: 12),
+          FilledButton.icon(
+            onPressed: _sending ? null : _sendFeedback,
             icon: const Icon(Icons.feedback_outlined),
-            label: const Text('Send feedback'),
+            label: Text(_sending ? 'Sending…' : 'Submit feedback'),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class DeleteAccountPage extends StatefulWidget {
+  const DeleteAccountPage({super.key});
+
+  @override
+  State<DeleteAccountPage> createState() => _DeleteAccountPageState();
+}
+
+class _DeleteAccountPageState extends State<DeleteAccountPage> {
+  bool _deleting = false;
+  bool _confirmed = false;
+
+  Future<void> _delete() async {
+    if (!_confirmed || _deleting) return;
+    setState(() => _deleting = true);
+    try {
+      await AccountDeletionService.instance.deleteCurrentAccount();
+      if (!mounted) return;
+      Navigator.of(context).pushAndRemoveUntil(
+        MaterialPageRoute<void>(builder: (_) => const AuthGate()),
+        (_) => false,
+      );
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Could not delete account: $e')),
+      );
+    } finally {
+      if (mounted) setState(() => _deleting = false);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(
+        title: const Text('Delete account'),
+      ),
+      body: ListView(
+        padding: const EdgeInsets.all(24),
+        children: [
+          Text(
+            'Delete your account',
+            style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                  fontWeight: FontWeight.bold,
+                ),
+          ),
+          const SizedBox(height: 8),
+          Text(
+            'This permanently deletes your sign-in, check-ins, notifications, '
+            'profile photo, partner wellness share, and peer group memberships. '
+            'Your display name becomes "Deleted user" for any family records that '
+            'still reference you. Export your data first if you want a copy.',
+            style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                  height: 1.4,
+                ),
+          ),
+          const SizedBox(height: 20),
+          CheckboxListTile(
+            contentPadding: EdgeInsets.zero,
+            value: _confirmed,
+            onChanged: (value) =>
+                setState(() => _confirmed = value ?? false),
+            title: const Text('I understand this cannot be undone'),
+          ),
+          const SizedBox(height: 20),
+          FilledButton(
+            style: FilledButton.styleFrom(backgroundColor: Colors.red.shade700),
+            onPressed: _confirmed && !_deleting ? _delete : null,
+            child: Text(_deleting ? 'Deleting…' : 'Delete my account'),
           ),
         ],
       ),

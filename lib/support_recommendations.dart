@@ -47,7 +47,7 @@ class PersonalizedSupportPlan {
       headline: 'Complete a check-in to see support matched to your trends',
       resources: SupportRecommendations.defaultResources(),
       resourceReasons: const {},
-      peerGroups: SupportCatalog.peerGroups.take(1).toList(),
+      peerGroups: const [],
       peerGroupReasons: const {},
       volunteerServices: const [
         VolunteerServiceRecommendation(
@@ -99,13 +99,6 @@ class SupportRecommendations {
       resourceReasons[resource.title] = reason;
     }
 
-    void addPeerGroup(CatalogPeerGroup group, String reason) {
-      if (!shareWithPartners) return;
-      if (peerGroups.any((g) => g.id == group.id)) return;
-      peerGroups.add(group);
-      peerGroupReasons[group.id] = reason;
-    }
-
     final allResources = [
       for (final section in SupportCatalog.resourceSections) ...section.items,
     ];
@@ -117,18 +110,10 @@ class SupportRecommendations {
       );
     }
 
-    CatalogPeerGroup findGroup(String id) {
-      return SupportCatalog.peerGroups.firstWhere((g) => g.id == id);
-    }
-
     if (topStress.contains('Sleep')) {
       addResource(
         findResource('Sleep routines'),
         'Sleep shows up often in your check-ins',
-      );
-      addPeerGroup(
-        findGroup('stress-sleep'),
-        'Matches your sleep-related stress pattern',
       );
     }
 
@@ -162,10 +147,6 @@ class SupportRecommendations {
       addResource(
         findResource('Getting started'),
         'Time and family demands are showing up in your trends',
-      );
-      addPeerGroup(
-        findGroup('caregiver-coffee'),
-        'Connect with other caregivers facing similar load',
       );
     }
 
@@ -212,20 +193,6 @@ class SupportRecommendations {
           subtitle: 'Take a break while we help',
           reason: 'Suggested from your recent wellness trends',
         ),
-      );
-    }
-
-    if (activeCount <= 1 || insights.participationTitle() == 'Getting started') {
-      addPeerGroup(
-        findGroup('caregiver-coffee'),
-        'Build momentum with other families',
-      );
-    }
-
-    if (peerGroups.isEmpty) {
-      addPeerGroup(
-        findGroup('stress-sleep'),
-        insights.planBufferSubtitle(),
       );
     }
 

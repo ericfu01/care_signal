@@ -5,6 +5,9 @@ import 'family_models.dart';
 import 'family_onboarding_page.dart';
 import 'family_repository.dart';
 import 'home_page.dart';
+import 'partner_home_page.dart';
+import 'staff_home_page.dart';
+import 'volunteer_background_check_page.dart';
 import 'volunteer_home_page.dart';
 import 'volunteer_setup_page.dart';
 
@@ -20,9 +23,18 @@ Widget homeWidgetForProfile(User user, UserProfile? profile) {
       'Member';
 
   if (profile?.isVolunteer == true) {
-    return profile!.volunteerProfileComplete
+    if (profile!.backgroundCheckBlocksVolunteer) {
+      return const VolunteerBackgroundCheckPage();
+    }
+    return profile.volunteerProfileComplete
         ? const VolunteerHomePage()
         : const VolunteerSetupPage();
+  }
+  if (profile?.isStaff == true) {
+    return const StaffHomePage();
+  }
+  if (profile?.isPartner == true) {
+    return const PartnerHomePage();
   }
   if (profile?.hasFamily == true) {
     return const HomePage();

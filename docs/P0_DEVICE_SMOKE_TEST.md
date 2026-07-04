@@ -67,13 +67,23 @@ Run after deploying functions, rules, and seeding transport coverage.
 
 ## Seed transport coverage (if not run yet)
 
+**Easiest (no gcloud):**
+
 ```bash
 cd /Users/ericfu/StudioProjects/care_signal
-node scripts/seed-transport-coverage.js
+./scripts/seed-transport-coverage-http.sh
 ```
 
-Requires Application Default Credentials:
+Or open in browser:
+`https://us-central1-care-signal-ai.cloudfunctions.net/seedTransportCoverage?secret=care-signal-bootstrap`
+
+**Alternative (requires gcloud ADC):**
 
 ```bash
 gcloud auth application-default login --project care-signal-ai
+node scripts/seed-transport-coverage.js
 ```
+
+## Without Apple Developer ($99/yr)
+
+Use [`docs/NO_APPLE_DEV_CHECKLIST.md`](NO_APPLE_DEV_CHECKLIST.md) — in-app Notifications inbox instead of lock-screen push.

@@ -93,6 +93,7 @@ class VolunteerMatching {
     final byLane = <String, List<UserProfile>>{};
     for (final doc in snap.docs) {
       final profile = UserProfile.fromDoc(doc);
+      if (!profile.backgroundCheckApproved) continue;
       final laneId = profile.volunteerCatalogId;
       if (laneId == null || laneId.isEmpty) continue;
       byLane.putIfAbsent(laneId, () => []).add(profile);
@@ -192,6 +193,7 @@ class VolunteerMatching {
           );
       final candidates = snap.docs
           .map(UserProfile.fromDoc)
+          .where((profile) => profile.backgroundCheckApproved)
           .where(
             (profile) => profile.isVolunteerAvailableForWindow(
               start: start,

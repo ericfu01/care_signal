@@ -455,6 +455,20 @@ class ProfilePage extends StatelessWidget {
                   ),
                   Divider(height: 1, thickness: 1, color: Colors.grey.shade200),
                   _ProfileActionRow(
+                    icon: Icons.delete_forever_rounded,
+                    iconColor: const Color(0xFFC62828),
+                    iconBoxColor: const Color(0xFFFFEBEE),
+                    label: 'Delete Account',
+                    onTap: () {
+                      Navigator.of(context).push(
+                        MaterialPageRoute<void>(
+                          builder: (context) => const DeleteAccountPage(),
+                        ),
+                      );
+                    },
+                  ),
+                  Divider(height: 1, thickness: 1, color: Colors.grey.shade200),
+                  _ProfileActionRow(
                     icon: Icons.logout_rounded,
                     iconColor: const Color(0xFFC62828),
                     iconBoxColor: const Color(0xFFFFEBEE),

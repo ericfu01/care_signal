@@ -1,6 +1,7 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 
+import 'community_event_repository.dart';
 import 'family_check_in_loader.dart';
 import 'family_insights_copy.dart';
 import 'family_models.dart';
@@ -9,6 +10,7 @@ import 'address_place.dart';
 import 'support_recommendations.dart';
 import 'request_duration.dart';
 import 'request_priority.dart';
+import 'peer_group_repository.dart';
 import 'volunteer_matching.dart';
 import 'volunteer_repository.dart';
 
@@ -169,6 +171,7 @@ class SupportRepository {
       {'partnerWellnessSnapshot': FieldValue.delete()},
       SetOptions(merge: true),
     );
+    await FirebaseFirestore.instance.collection('partner_shares').doc(uid).delete();
   }
 
   Future<void> syncPartnerWellnessSnapshot({
@@ -192,6 +195,12 @@ class SupportRepository {
       },
       SetOptions(merge: true),
     );
+    await FirebaseFirestore.instance.collection('partner_shares').doc(uid).set({
+      'score': score,
+      'dayKey': dayKey,
+      'topStressSources': topStress,
+      'updatedAt': FieldValue.serverTimestamp(),
+    });
   }
 
   Future<void> syncLatestPartnerWellnessSnapshot() async {
@@ -507,28 +516,33 @@ class SupportRepository {
         'Turn on Share with Partners in Support to join partner peer groups.',
       );
     }
-    await _userSub(uid, 'peer_group_requests').doc(groupId).set({
-      'groupId': groupId,
-      'groupTitle': groupTitle,
-      'status': 'pending',
-      'createdAt': FieldValue.serverTimestamp(),
-    });
+    final user = FirebaseAuth.instance.currentUser;
+    final name = user?.displayName?.trim();
+    final requesterName = (name != null && name.isNotEmpty)
+        ? name
+        : (user?.email?.split('@').first ?? 'Member');
+    await PeerGroupRepository.instance.submitJoinRequest(
+      groupId: groupId,
+      groupTitle: groupTitle,
+      requesterUid: uid,
+      requesterName: requesterName,
+    );
   }
 
   Future<bool> hasEventSignup(String eventId) async {
-    final uid = await _uid();
-    if (uid == null) return false;
-    try {
-      final snap = await _userSub(uid, 'event_signups').doc(eventId).get();
-      return snap.exists;
-    } catch (_) {
-      return false;
-    }
+    return CommunityEventRepository.instance.hasSignup(eventId);
   }
 
   Future<int> eventSignupCount(String eventId) async {
-    // Avoid collectionGroup queries — they need extra rules and indexes.
-    return 0;
+    try {
+      final snap = await FirebaseFirestore.instance
+          .collection('community_events')
+          .doc(eventId)
+          .get();
+      return (snap.data()?['signupCount'] as num?)?.round() ?? 0;
+    } catch (_) {
+      return 0;
+    }
   }
 
   Future<void> submitEventSignup({
@@ -539,17 +553,14 @@ class SupportRepository {
     String? phone,
     required int familyCount,
   }) async {
-    final uid = await _uid();
-    if (uid == null) throw StateError('Sign in to sign up.');
-    await _userSub(uid, 'event_signups').doc(eventId).set({
-      'eventId': eventId,
-      'eventTitle': eventTitle,
-      'name': name.trim(),
-      'email': email.trim(),
-      'phone': phone?.trim(),
-      'familyCount': familyCount,
-      'createdAt': FieldValue.serverTimestamp(),
-    });
+    await CommunityEventRepository.instance.submitSignup(
+      eventId: eventId,
+      eventTitle: eventTitle,
+      name: name,
+      email: email,
+      phone: phone,
+      familyCount: familyCount,
+    );
   }
 
   Future<void> submitVolunteerSchedule({

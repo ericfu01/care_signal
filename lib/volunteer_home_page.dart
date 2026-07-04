@@ -17,9 +17,15 @@ import 'volunteer_request_detail_page.dart';
 import 'volunteer_setup_page.dart';
 import 'notifications_page.dart';
 import 'notification_repository.dart';
+import 'peer_group_volunteer_tab.dart';
 
 class VolunteerHomePage extends StatefulWidget {
-  const VolunteerHomePage({super.key});
+  const VolunteerHomePage({
+    this.initialTabIndex = 0,
+    super.key,
+  });
+
+  final int initialTabIndex;
 
   @override
   State<VolunteerHomePage> createState() => _VolunteerHomePageState();
@@ -37,6 +43,7 @@ class _VolunteerHomePageState extends State<VolunteerHomePage> {
   @override
   void initState() {
     super.initState();
+    _tabIndex = widget.initialTabIndex.clamp(0, 4);
     final uid = FirebaseAuth.instance.currentUser?.uid;
     if (uid != null) {
       _profileSub = FamilyRepository.instance.watchUserProfile(uid).listen(
@@ -191,6 +198,7 @@ class _VolunteerHomePageState extends State<VolunteerHomePage> {
               _tabIndex = 1;
               _requestFilter = 0;
             }),
+            onOpenPeerGroups: () => setState(() => _tabIndex = 3),
           ),
           _RequestsTab(
             catalogId: _catalogId,
@@ -203,6 +211,7 @@ class _VolunteerHomePageState extends State<VolunteerHomePage> {
             catalogId: _catalogId,
             volunteerName: _volunteerName,
           ),
+          const PeerGroupVolunteerTab(),
           _ProfileTab(
             profile: _profile,
             lane: _lane,
@@ -241,6 +250,11 @@ class _VolunteerHomePageState extends State<VolunteerHomePage> {
             label: 'Messages',
           ),
           NavigationDestination(
+            icon: Icon(Icons.groups_outlined),
+            selectedIcon: Icon(Icons.groups_rounded),
+            label: 'Groups',
+          ),
+          NavigationDestination(
             icon: Icon(Icons.person_outline_rounded),
             selectedIcon: Icon(Icons.person_rounded),
             label: 'Profile',
@@ -255,6 +269,7 @@ class _VolunteerHomePageState extends State<VolunteerHomePage> {
       0 => 'Volunteer home',
       1 => 'Requests',
       2 => 'Messages',
+      3 => 'Peer groups',
       _ => 'Profile',
     };
   }
@@ -269,6 +284,7 @@ class _DashboardTab extends StatelessWidget {
     required this.availableNow,
     required this.onEditSchedule,
     required this.onOpenRequests,
+    required this.onOpenPeerGroups,
   });
 
   final UserProfile? profile;
@@ -278,6 +294,7 @@ class _DashboardTab extends StatelessWidget {
   final bool availableNow;
   final VoidCallback onEditSchedule;
   final VoidCallback onOpenRequests;
+  final VoidCallback onOpenPeerGroups;
 
   @override
   Widget build(BuildContext context) {
@@ -400,6 +417,21 @@ class _DashboardTab extends StatelessWidget {
                   ),
                 ],
               ],
+            ),
+          ),
+          const SizedBox(height: 14),
+          _ProfileSection(
+            title: 'Peer groups',
+            child: ListTile(
+              contentPadding: EdgeInsets.zero,
+              leading: CircleAvatar(
+                backgroundColor: kPeerGroupAccent.withValues(alpha: 0.12),
+                child: const Icon(Icons.groups_rounded, color: kPeerGroupAccent),
+              ),
+              title: const Text('Peer groups'),
+              subtitle: const Text('Create and manage your support groups'),
+              trailing: const Icon(Icons.chevron_right_rounded),
+              onTap: onOpenPeerGroups,
             ),
           ),
           if (lane != null) ...[

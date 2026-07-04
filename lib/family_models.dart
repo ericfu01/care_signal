@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'family_presence.dart';
 import 'account_type.dart';
 import 'volunteer_availability.dart';
+import 'volunteer_background_check.dart';
 import 'volunteer_profile_stats.dart';
 
 /// `users/{uid}` profile fields used for family features.
@@ -22,6 +23,10 @@ class UserProfile {
     this.volunteerStats = const VolunteerProfileStats(),
     this.lastActiveAt,
     this.profilePhotoUrl,
+    this.backgroundCheckStatus,
+    this.backgroundCheckNote,
+    this.backgroundCheckSubmittedAt,
+    this.backgroundCheckReviewedAt,
   });
 
   final String uid;
@@ -37,6 +42,10 @@ class UserProfile {
   final VolunteerProfileStats volunteerStats;
   final DateTime? lastActiveAt;
   final String? profilePhotoUrl;
+  final String? backgroundCheckStatus;
+  final String? backgroundCheckNote;
+  final DateTime? backgroundCheckSubmittedAt;
+  final DateTime? backgroundCheckReviewedAt;
 
   /// Safe read for profiles loaded before weekly hours existed or after hot reload.
   VolunteerAvailabilitySchedule volunteerSchedule() {
@@ -51,9 +60,17 @@ class UserProfile {
   bool get hasFamily => familyId != null && familyId!.isNotEmpty;
   bool get isAdmin => familyRole == 'admin';
   bool get isVolunteer => AccountType.isVolunteer(accountType);
+  bool get isStaff => AccountType.isStaff(accountType);
+  bool get isPartner => AccountType.isPartner(accountType);
   bool get isCaregiver => AccountType.isCaregiver(accountType);
   bool get volunteerProfileComplete =>
       !isVolunteer || (volunteerCatalogId != null && volunteerCatalogId!.isNotEmpty);
+  bool get backgroundCheckApproved =>
+      VolunteerBackgroundCheckStatus.isApproved(backgroundCheckStatus);
+  bool get backgroundCheckPending =>
+      VolunteerBackgroundCheckStatus.isPending(backgroundCheckStatus);
+  bool get backgroundCheckBlocksVolunteer =>
+      isVolunteer && VolunteerBackgroundCheckStatus.blocksVolunteerAccess(backgroundCheckStatus);
 
   bool isVolunteerAvailableNow([DateTime? at]) {
     final moment = at ?? DateTime.now();
@@ -97,6 +114,12 @@ class UserProfile {
       volunteerStats: VolunteerProfileStats.fromFirestore(data['volunteerStats']),
       lastActiveAt: FamilyPresence.timestampToDate(data['lastActiveAt']),
       profilePhotoUrl: (data['profilePhotoUrl'] as String?)?.trim(),
+      backgroundCheckStatus: data['backgroundCheckStatus'] as String?,
+      backgroundCheckNote: data['backgroundCheckNote'] as String?,
+      backgroundCheckSubmittedAt:
+          FamilyPresence.timestampToDate(data['backgroundCheckSubmittedAt']),
+      backgroundCheckReviewedAt:
+          FamilyPresence.timestampToDate(data['backgroundCheckReviewedAt']),
     );
   }
 
@@ -109,6 +132,8 @@ class UserProfile {
       'displayName': displayName.trim(),
       'email': email.trim(),
       'accountType': accountType ?? AccountType.caregiver,
+      if (AccountType.isVolunteer(accountType))
+        'backgroundCheckStatus': VolunteerBackgroundCheckStatus.notStarted,
       'createdAt': FieldValue.serverTimestamp(),
     };
   }

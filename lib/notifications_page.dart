@@ -243,6 +243,27 @@ class _NotificationTile extends StatelessWidget {
 
     if (notification.isFamilyRiskAlert) {
       // Inbox-only — message explains who may need support.
+      return;
+    }
+
+    if (notification.isPeerGroupJoinRequest) {
+      final groupId = notification.groupId ?? '';
+      if (groupId.isNotEmpty) {
+        await NotificationNavigation.openPeerGroupHostManage(
+          context,
+          groupId: groupId,
+        );
+      }
+      return;
+    }
+
+    if (notification.isPeerGroupCoHostInvite) {
+      await NotificationNavigation.openPeerGroupCoHostInvites(context);
+      return;
+    }
+
+    if (notification.isPeerGroupFamilyInvite) {
+      await NotificationNavigation.openPeerGroupFamilyInvites(context);
     }
   }
 

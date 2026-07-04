@@ -1,6 +1,11 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:url_launcher/url_launcher.dart';
 
+import 'peer_group_member_detail_page.dart';
+import 'peer_group_models.dart';
+import 'peer_group_repository.dart';
 import 'support_catalog.dart';
 import 'support_repository.dart';
 
@@ -246,46 +251,97 @@ class PeerGroupsPage extends StatefulWidget {
 }
 
 class _PeerGroupsPageState extends State<PeerGroupsPage> {
-  final _joined = <String>{};
-  final _joining = <String>{};
-  bool _loading = false;
+  final _statuses = <String, PeerGroupMemberStatus>{};
+  final _invitations = <String, PeerGroupInvitation>{};
+  final _acting = <String>{};
+  bool _loadingStatuses = false;
+  bool _groupsLoading = true;
+  List<PeerGroupRecord> _groups = const [];
+  String? _loadedGroupIdsKey;
+  StreamSubscription<List<PeerGroupRecord>>? _groupsSub;
 
   @override
   void initState() {
     super.initState();
-    _loadJoined();
+    unawaited(PeerGroupRepository.instance.deleteCatalogDemoGroups());
+    _groupsSub = PeerGroupRepository.instance.watchPublicGroups().listen(
+      (groups) => unawaited(_onGroupsUpdated(groups)),
+    );
   }
 
-  Future<void> _loadJoined() async {
-    setState(() => _loading = true);
-    try {
-      final groups = SupportCatalog.peerGroups;
-      final joined = <String>{};
-      for (final group in groups) {
-        if (await SupportRepository.instance.hasPeerGroupRequest(group.id)) {
-          joined.add(group.id);
-        }
-      }
+  @override
+  void dispose() {
+    _groupsSub?.cancel();
+    super.dispose();
+  }
+
+  Future<void> _onGroupsUpdated(List<PeerGroupRecord> groups) async {
+    final key = groups.map((g) => g.id).join('|');
+    if (!mounted) return;
+
+    setState(() {
+      _groups = groups;
+      _groupsLoading = false;
+    });
+
+    if (key == _loadedGroupIdsKey) return;
+    _loadedGroupIdsKey = key;
+    await _loadStatuses(groups);
+  }
+
+  Future<void> _loadStatuses(List<PeerGroupRecord> groups) async {
+    if (groups.isEmpty) {
       if (!mounted) return;
-      setState(() => _joined.addAll(joined));
+      setState(() {
+        _statuses.clear();
+        _invitations.clear();
+        _loadingStatuses = false;
+      });
+      return;
+    }
+
+    setState(() => _loadingStatuses = true);
+    try {
+      final statuses = await PeerGroupRepository.instance.loadMemberStatuses(
+        groups.map((g) => g.id),
+      );
+      final invites =
+          await PeerGroupRepository.instance.loadInvitationsForGroups(
+        groups.map((g) => g.id),
+      );
+      final inviteMap = {
+        for (final invite in invites.where((i) => i.isPending))
+          invite.groupId: invite,
+      };
+      if (!mounted) return;
+      setState(() {
+        _statuses
+          ..clear()
+          ..addAll(statuses);
+        _invitations
+          ..clear()
+          ..addAll(inviteMap);
+      });
     } finally {
-      if (mounted) setState(() => _loading = false);
+      if (mounted) setState(() => _loadingStatuses = false);
     }
   }
 
-  Future<void> _join(CatalogPeerGroup group) async {
-    if (_joined.contains(group.id) || _joining.contains(group.id)) return;
-    setState(() => _joining.add(group.id));
+  Future<void> _join(PeerGroupRecord group) async {
+    final status = _statuses[group.id] ?? PeerGroupMemberStatus.none;
+    if (status == PeerGroupMemberStatus.pending ||
+        status == PeerGroupMemberStatus.accepted ||
+        _acting.contains(group.id)) {
+      return;
+    }
+    setState(() => _acting.add(group.id));
     try {
       await SupportRepository.instance.submitPeerGroupRequest(
         groupId: group.id,
         groupTitle: group.title,
       );
       if (!mounted) return;
-      setState(() {
-        _joined.add(group.id);
-        _joining.remove(group.id);
-      });
+      setState(() => _statuses[group.id] = PeerGroupMemberStatus.pending);
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text('Request sent for “${group.title}”.'),
@@ -293,62 +349,131 @@ class _PeerGroupsPageState extends State<PeerGroupsPage> {
       );
     } catch (e) {
       if (!mounted) return;
-      setState(() => _joining.remove(group.id));
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text('Could not send request: $e')),
       );
+    } finally {
+      if (mounted) setState(() => _acting.remove(group.id));
     }
+  }
+
+  Future<void> _acceptInvite(PeerGroupRecord group) async {
+    final invite = _invitations[group.id];
+    if (invite == null || _acting.contains(group.id)) return;
+    setState(() => _acting.add(group.id));
+    try {
+      await PeerGroupRepository.instance.acceptInvitation(
+        groupId: group.id,
+        invitationId: invite.id,
+      );
+      if (!mounted) return;
+      setState(() {
+        _statuses[group.id] = PeerGroupMemberStatus.accepted;
+        _invitations.remove(group.id);
+      });
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('You joined “${group.title}”.')),
+      );
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Could not accept invitation: $e')),
+      );
+    } finally {
+      if (mounted) setState(() => _acting.remove(group.id));
+    }
+  }
+
+  String _statusLabel(PeerGroupMemberStatus status) {
+    return switch (status) {
+      PeerGroupMemberStatus.invited => 'Invited',
+      PeerGroupMemberStatus.pending => 'Requested',
+      PeerGroupMemberStatus.accepted => 'Member',
+      PeerGroupMemberStatus.declined => 'Declined',
+      PeerGroupMemberStatus.none => '',
+    };
   }
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final groups = SupportCatalog.peerGroups;
 
     return Scaffold(
       appBar: AppBar(
         title: const Text('Peer Groups'),
       ),
       body: SafeArea(
-        child: SingleChildScrollView(
-          padding: const EdgeInsets.fromLTRB(20, 16, 20, 28),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              Text(
-                'Community',
-                style: theme.textTheme.titleMedium?.copyWith(
-                  fontWeight: FontWeight.w800,
-                ),
-              ),
-              const SizedBox(height: 6),
-              Text(
-                'Request to join a group. A coordinator will follow up with details.',
-                style: theme.textTheme.bodySmall?.copyWith(
-                  color: Colors.black54,
-                  height: 1.35,
-                ),
-              ),
-              if (_loading) ...[
-                const SizedBox(height: 20),
-                const LinearProgressIndicator(minHeight: 2),
-              ],
-              const SizedBox(height: 20),
-              ...groups.map(
-                (g) => Padding(
-                  padding: const EdgeInsets.only(bottom: 12),
-                  child: _PeerGroupCard(
-                    item: g,
-                    accent: PeerGroupsPage._accent,
-                    joined: _joined.contains(g.id),
-                    joining: _joining.contains(g.id),
-                    onJoin: () => _join(g),
+        child: _groupsLoading
+            ? const Center(child: CircularProgressIndicator())
+            : SingleChildScrollView(
+              padding: const EdgeInsets.fromLTRB(20, 16, 20, 28),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  Text(
+                    'Community',
+                    style: theme.textTheme.titleMedium?.copyWith(
+                      fontWeight: FontWeight.w800,
+                    ),
                   ),
-                ),
+                  const SizedBox(height: 6),
+                  Text(
+                    'Request to join a group, or accept an invitation from your host.',
+                    style: theme.textTheme.bodySmall?.copyWith(
+                      color: Colors.black54,
+                      height: 1.35,
+                    ),
+                  ),
+                  if (_loadingStatuses) ...[
+                    const SizedBox(height: 20),
+                    const LinearProgressIndicator(minHeight: 2),
+                  ],
+                  const SizedBox(height: 20),
+                  if (_groups.isEmpty)
+                    Padding(
+                      padding: const EdgeInsets.symmetric(vertical: 32),
+                      child: Text(
+                        'No peer groups are available yet. Check back when '
+                        'volunteers create support groups.',
+                        textAlign: TextAlign.center,
+                        style: theme.textTheme.bodyLarge?.copyWith(
+                          color: Colors.black54,
+                          height: 1.4,
+                        ),
+                      ),
+                    )
+                  else
+                    ..._groups.map(
+                      (group) {
+                        final status = _invitations.containsKey(group.id)
+                            ? PeerGroupMemberStatus.invited
+                            : (_statuses[group.id] ??
+                                PeerGroupMemberStatus.none);
+                        return Padding(
+                          padding: const EdgeInsets.only(bottom: 12),
+                          child: _PeerGroupCard(
+                            group: group,
+                            accent: PeerGroupsPage._accent,
+                            status: status,
+                            acting: _acting.contains(group.id),
+                            onJoin: () => _join(group),
+                            onAcceptInvite: () => _acceptInvite(group),
+                            onViewDetails: () {
+                              Navigator.of(context).push<void>(
+                                MaterialPageRoute<void>(
+                                  builder: (context) =>
+                                      PeerGroupMemberDetailPage(group: group),
+                                ),
+                              );
+                            },
+                            statusLabel: _statusLabel(status),
+                          ),
+                        );
+                      },
+                    ),
+                ],
               ),
-            ],
-          ),
-        ),
+            ),
       ),
     );
   }
@@ -356,18 +481,24 @@ class _PeerGroupsPageState extends State<PeerGroupsPage> {
 
 class _PeerGroupCard extends StatelessWidget {
   const _PeerGroupCard({
-    required this.item,
+    required this.group,
     required this.accent,
-    required this.joined,
-    required this.joining,
+    required this.status,
+    required this.acting,
     required this.onJoin,
+    required this.onAcceptInvite,
+    required this.onViewDetails,
+    required this.statusLabel,
   });
 
-  final CatalogPeerGroup item;
+  final PeerGroupRecord group;
   final Color accent;
-  final bool joined;
-  final bool joining;
+  final PeerGroupMemberStatus status;
+  final bool acting;
   final VoidCallback onJoin;
+  final VoidCallback onAcceptInvite;
+  final VoidCallback onViewDetails;
+  final String statusLabel;
 
   @override
   Widget build(BuildContext context) {
@@ -400,7 +531,7 @@ class _PeerGroupCard extends StatelessWidget {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(
-                      item.title,
+                      group.title,
                       style: theme.textTheme.titleSmall?.copyWith(
                         fontWeight: FontWeight.w700,
                       ),
@@ -408,19 +539,19 @@ class _PeerGroupCard extends StatelessWidget {
                     const SizedBox(height: 6),
                     _PeerMetaRow(
                       icon: Icons.event_rounded,
-                      text: item.schedule,
+                      text: group.schedule,
                     ),
                     const SizedBox(height: 4),
                     _PeerMetaRow(
-                      icon: item.mode.startsWith('In person')
+                      icon: group.mode.startsWith('In person')
                           ? Icons.place_rounded
                           : Icons.videocam_rounded,
-                      text: item.mode,
+                      text: group.mode,
                     ),
                     const SizedBox(height: 4),
                     _PeerMetaRow(
                       icon: Icons.people_outline_rounded,
-                      text: item.members,
+                      text: group.membersLabel,
                     ),
                   ],
                 ),
@@ -428,22 +559,62 @@ class _PeerGroupCard extends StatelessWidget {
             ],
           ),
           const SizedBox(height: 14),
-          Align(
-            alignment: Alignment.centerRight,
-            child: FilledButton(
-              onPressed: joined || joining ? null : onJoin,
-              style: FilledButton.styleFrom(
-                backgroundColor: accent,
-                foregroundColor: Colors.white,
-              ),
-              child: Text(
-                joined
-                    ? 'Requested'
-                    : joining
-                        ? 'Sending…'
-                        : 'Request to join',
+          if (statusLabel.isNotEmpty)
+            Padding(
+              padding: const EdgeInsets.only(bottom: 10),
+              child: Align(
+                alignment: Alignment.centerLeft,
+                child: Chip(
+                  label: Text(statusLabel),
+                  backgroundColor: status == PeerGroupMemberStatus.accepted
+                      ? Colors.green.shade50
+                      : accent.withValues(alpha: 0.1),
+                ),
               ),
             ),
+          Align(
+            alignment: Alignment.centerRight,
+            child: status == PeerGroupMemberStatus.invited
+                ? FilledButton(
+                    onPressed: acting ? null : onAcceptInvite,
+                    style: FilledButton.styleFrom(
+                      backgroundColor: accent,
+                      foregroundColor: Colors.white,
+                    ),
+                    child: Text(acting ? 'Joining…' : 'Accept invitation'),
+                  )
+                : status == PeerGroupMemberStatus.accepted
+                    ? FilledButton(
+                        onPressed: onViewDetails,
+                        style: FilledButton.styleFrom(
+                          backgroundColor: accent,
+                          foregroundColor: Colors.white,
+                        ),
+                        child: const Text('View details'),
+                      )
+                    : FilledButton(
+                        onPressed: acting ||
+                                status == PeerGroupMemberStatus.pending
+                            ? null
+                            : onJoin,
+                        style: FilledButton.styleFrom(
+                          backgroundColor: accent,
+                          foregroundColor: Colors.white,
+                        ),
+                        child: Text(
+                          status == PeerGroupMemberStatus.pending
+                              ? acting
+                                  ? 'Sending…'
+                                  : 'Requested'
+                              : status == PeerGroupMemberStatus.declined
+                                  ? acting
+                                      ? 'Sending…'
+                                      : 'Request again'
+                                  : acting
+                                      ? 'Sending…'
+                                      : 'Request to join',
+                        ),
+                      ),
           ),
         ],
       ),

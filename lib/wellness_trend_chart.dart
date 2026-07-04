@@ -262,73 +262,67 @@ class _WellnessTrendPainter extends CustomPainter {
       canvas.drawLine(Offset(0, y), Offset(size.width, y), gridPaint);
     }
 
-    final segments = <List<Offset>>[];
-    var current = <Offset>[];
-
+    final plotted = <Offset>[];
     for (var i = 0; i < points.length; i++) {
       final score = points[i].averageScore;
-      if (score == null) {
-        if (current.length >= 2) segments.add(List.from(current));
-        current = [];
-        continue;
+      if (score != null) {
+        plotted.add(_pointAt(size, i, score, topPad, chartHeight));
       }
-      current.add(_pointAt(size, i, score, topPad, chartHeight));
-    }
-    if (current.length >= 2) segments.add(current);
-    if (current.length == 1 && segments.isEmpty) {
-      segments.add(current);
     }
 
-    for (final segment in segments) {
-      if (segment.length == 1) {
-        final point = segment.first;
-        final stubHalfWidth = 18.0;
-        canvas.drawLine(
-          Offset(point.dx - stubHalfWidth, point.dy),
-          Offset(point.dx + stubHalfWidth, point.dy),
-          Paint()
-            ..color = lineColor
-            ..strokeWidth = 2.5
-            ..strokeCap = StrokeCap.round,
-        );
-      } else if (segment.length >= 2) {
-        final fillPath = Path()..moveTo(segment.first.dx, topPad + chartHeight);
-        for (final p in segment) {
-          fillPath.lineTo(p.dx, p.dy);
-        }
-        fillPath
-          ..lineTo(segment.last.dx, topPad + chartHeight)
-          ..close();
+    if (plotted.isEmpty) return;
 
-        canvas.drawPath(
-          fillPath,
-          Paint()
-            ..shader = LinearGradient(
-              begin: Alignment.topCenter,
-              end: Alignment.bottomCenter,
-              colors: [fillTop, fillBottom],
-            ).createShader(Rect.fromLTWH(0, topPad, size.width, chartHeight)),
-        );
-
-        final linePath = Path()..moveTo(segment.first.dx, segment.first.dy);
-        for (var i = 1; i < segment.length; i++) {
-          linePath.lineTo(segment[i].dx, segment[i].dy);
-        }
-        canvas.drawPath(
-          linePath,
-          Paint()
-            ..color = lineColor
-            ..strokeWidth = 2.5
-            ..style = PaintingStyle.stroke
-            ..strokeCap = StrokeCap.round
-            ..strokeJoin = StrokeJoin.round,
-        );
+    if (plotted.length == 1) {
+      final point = plotted.first;
+      const stubHalfWidth = 18.0;
+      canvas.drawLine(
+        Offset(point.dx - stubHalfWidth, point.dy),
+        Offset(point.dx + stubHalfWidth, point.dy),
+        Paint()
+          ..color = lineColor
+          ..strokeWidth = 2.5
+          ..strokeCap = StrokeCap.round,
+      );
+    } else {
+      final baseline = topPad + chartHeight;
+      final fillPath = Path()
+        ..moveTo(plotted.first.dx, baseline)
+        ..lineTo(plotted.first.dx, plotted.first.dy);
+      for (var i = 1; i < plotted.length; i++) {
+        fillPath.lineTo(plotted[i].dx, plotted[i].dy);
       }
+      fillPath
+        ..lineTo(plotted.last.dx, baseline)
+        ..close();
 
-      for (final p in segment) {
-        canvas.drawCircle(p, 5.5, Paint()..color = lineColor);
-        canvas.drawCircle(p, 2.5, Paint()..color = Colors.white);
+      canvas.drawPath(
+        fillPath,
+        Paint()
+          ..shader = LinearGradient(
+            begin: Alignment.topCenter,
+            end: Alignment.bottomCenter,
+            colors: [fillTop, fillBottom],
+          ).createShader(Rect.fromLTWH(0, topPad, size.width, chartHeight)),
+      );
+
+      final linePath = Path()..moveTo(plotted.first.dx, plotted.first.dy);
+      for (var i = 1; i < plotted.length; i++) {
+        linePath.lineTo(plotted[i].dx, plotted[i].dy);
       }
+      canvas.drawPath(
+        linePath,
+        Paint()
+          ..color = lineColor
+          ..strokeWidth = 2.5
+          ..style = PaintingStyle.stroke
+          ..strokeCap = StrokeCap.round
+          ..strokeJoin = StrokeJoin.round,
+      );
+    }
+
+    for (final point in plotted) {
+      canvas.drawCircle(point, 5.5, Paint()..color = lineColor);
+      canvas.drawCircle(point, 2.5, Paint()..color = Colors.white);
     }
   }
 

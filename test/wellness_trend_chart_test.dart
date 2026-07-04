@@ -41,4 +41,27 @@ void main() {
 
     expect(find.text('No check-in history yet.'), findsOneWidget);
   });
+
+  testWidgets('renders dots for sparse non-consecutive check-in days', (tester) async {
+    final points = [
+      DailyWellnessPoint(date: DateTime(2026, 6, 1), averageScore: 60),
+      DailyWellnessPoint(date: DateTime(2026, 6, 2)),
+      DailyWellnessPoint(date: DateTime(2026, 6, 3)),
+      DailyWellnessPoint(date: DateTime(2026, 6, 4), averageScore: 72),
+      DailyWellnessPoint(date: DateTime(2026, 6, 5)),
+      DailyWellnessPoint(date: DateTime(2026, 6, 6), averageScore: 68),
+      DailyWellnessPoint(date: DateTime(2026, 6, 7)),
+    ];
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: WellnessTrendChart(points: points),
+        ),
+      ),
+    );
+
+    expect(find.textContaining('Complete daily check-ins'), findsNothing);
+    expect(find.text('No check-in history yet.'), findsNothing);
+  });
 }

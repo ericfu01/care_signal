@@ -124,12 +124,23 @@ class _SignUpPageState extends State<SignUpPage> {
             const SizedBox(height: 10),
             _AccountTypeCard(
               title: 'Volunteer',
-              subtitle: 'Help families with rides, respite, meals, and more',
+              subtitle:
+                  'Help families with rides, respite, meals — and optionally host peer groups',
               icon: Icons.volunteer_activism_rounded,
               selected: _accountType == AccountType.volunteer,
               onTap: _loading
                   ? null
                   : () => setState(() => _accountType = AccountType.volunteer),
+            ),
+            const SizedBox(height: 10),
+            _AccountTypeCard(
+              title: 'Care partner',
+              subtitle: 'View de-identified wellness trends shared by families',
+              icon: Icons.handshake_rounded,
+              selected: _accountType == AccountType.partner,
+              onTap: _loading
+                  ? null
+                  : () => setState(() => _accountType = AccountType.partner),
             ),
             const SizedBox(height: 24),
             TextField(

@@ -8,6 +8,7 @@ import 'auth_error_support.dart';
 import 'family_repository.dart';
 import 'saved_login_email.dart';
 import 'sign_up_page.dart';
+import 'staff_invite_page.dart';
 
 class SignInPage extends StatefulWidget {
   const SignInPage({super.key});
@@ -300,6 +301,18 @@ class _SignInPageState extends State<SignInPage> {
                         );
                       },
                 child: const Text('Create an account'),
+              ),
+              TextButton(
+                onPressed: _loading
+                    ? null
+                    : () {
+                        Navigator.of(context).push<void>(
+                          MaterialPageRoute<void>(
+                            builder: (context) => const StaffInvitePage(),
+                          ),
+                        );
+                      },
+                child: const Text('Staff access code'),
               ),
             ],
           ),

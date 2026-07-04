@@ -121,36 +121,7 @@ class SupportCatalog {
   static CatalogVolunteer get transportationLane =>
       volunteers.firstWhere((v) => v.id == 'derek-morrison');
 
-  static List<CatalogPeerGroup> get peerGroups => const [
-        CatalogPeerGroup(
-          id: 'caregiver-coffee',
-          title: 'Caregiver coffee hour',
-          schedule: 'Wednesdays · 10:00 a.m.',
-          mode: 'Online · Zoom',
-          members: '12 families',
-        ),
-        CatalogPeerGroup(
-          id: 'teen-sibling',
-          title: 'Teen sibling circle',
-          schedule: 'Biweekly Saturdays · 2:00 p.m.',
-          mode: 'Online',
-          members: '8 families',
-        ),
-        CatalogPeerGroup(
-          id: 'north-meetup',
-          title: 'Local meet-up — North region',
-          schedule: 'First Monday · 6:30 p.m.',
-          mode: 'In person · Community center',
-          members: '15 families',
-        ),
-        CatalogPeerGroup(
-          id: 'stress-sleep',
-          title: 'Stress & sleep check-in',
-          schedule: 'Fridays · 8:00 p.m.',
-          mode: 'Online · audio optional',
-          members: '21 families',
-        ),
-      ];
+  static List<CatalogPeerGroup> get peerGroups => const [];
 
   static List<CatalogResourceSection> get resourceSections => [
         CatalogResourceSection(

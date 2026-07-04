@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:math';
 
 import 'package:cloud_firestore/cloud_firestore.dart';
@@ -57,14 +58,29 @@ class FamilyRepository {
   Future<UserProfile?> getUserProfile(String uid) async {
     final snap = await _users.doc(uid).get();
     if (!snap.exists) return null;
-    return UserProfile.fromDoc(snap);
+    final profile = UserProfile.fromDoc(snap);
+    await _migrateLegacyPeerGroupHostIfNeeded(uid, profile);
+    return profile;
   }
 
   Stream<UserProfile?> watchUserProfile(String uid) {
     return _users.doc(uid).snapshots().map((snap) {
       if (!snap.exists) return null;
-      return UserProfile.fromDoc(snap);
+      final profile = UserProfile.fromDoc(snap);
+      unawaited(_migrateLegacyPeerGroupHostIfNeeded(uid, profile));
+      return profile;
     });
+  }
+
+  Future<void> _migrateLegacyPeerGroupHostIfNeeded(
+    String uid,
+    UserProfile profile,
+  ) async {
+    if (!AccountType.isLegacyPeerGroupHost(profile.accountType)) return;
+    await _users.doc(uid).set(
+      {'accountType': AccountType.volunteer},
+      SetOptions(merge: true),
+    );
   }
 
   Stream<List<UserProfile>> watchFamilyMembers(String familyId) {

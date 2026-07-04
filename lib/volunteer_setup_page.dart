@@ -89,8 +89,8 @@ class _VolunteerSetupPageState extends State<VolunteerSetupPage> {
             ),
             const SizedBox(height: 8),
             Text(
-              'This matches you with the right support requests. You can use your real name — '
-              'the examples below are just service categories.',
+              'This matches you with the right support requests. You can also host '
+              'peer support groups from the Groups tab after setup.',
               style: theme.textTheme.bodyMedium?.copyWith(
                 color: Colors.black54,
                 height: 1.4,

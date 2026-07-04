@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import 'community_event_repository.dart';
 import 'event_signup_page.dart';
 import 'scheduled_event.dart';
 import 'support_action_pages.dart';
@@ -37,33 +38,43 @@ class _SupportPageState extends State<SupportPage> {
       final plan =
           await SupportRepository.instance.loadPersonalizedSupportPlan();
       final share = await SupportRepository.instance.getShareWithPartners();
+      final communityEvent =
+          await CommunityEventRepository.instance.fetchFeaturedEvent();
+
+      ScheduledEvent? scheduled;
       var signedUp = false;
-      var signupCount = catalogEvent?.baseFamiliesSignedUp ?? 0;
-      final event = plan.featuredEvent ?? catalogEvent;
-      if (event != null) {
-        signedUp = await SupportRepository.instance.hasEventSignup(event.id);
-        if (signedUp) signupCount += 1;
+      String? eventReason = plan.eventReason;
+
+      if (communityEvent != null) {
+        signedUp =
+            await SupportRepository.instance.hasEventSignup(communityEvent.id);
+        scheduled = communityEvent.toScheduledEvent();
+        eventReason ??= 'Upcoming community event';
+      } else {
+        final catalog = plan.featuredEvent ?? catalogEvent;
+        if (catalog != null) {
+          signedUp = await SupportRepository.instance.hasEventSignup(catalog.id);
+          var signupCount = catalog.baseFamiliesSignedUp;
+          if (signedUp) signupCount += 1;
+          scheduled = ScheduledEvent(
+            id: catalog.id,
+            monthAbbrev: catalog.monthAbbrev,
+            day: catalog.day,
+            title: catalog.title,
+            isOnline: catalog.isOnline,
+            timeDisplay: catalog.timeDisplay,
+            familiesSignedUp: signupCount,
+          );
+        }
       }
 
       if (!mounted) return;
       setState(() {
         _plan = plan;
-        _eventReason = plan.eventReason;
+        _eventReason = eventReason;
         _shareWithPartners = share;
         _signedUpForEvent = signedUp;
-        if (event != null) {
-          _scheduledEvent = ScheduledEvent(
-            id: event.id,
-            monthAbbrev: event.monthAbbrev,
-            day: event.day,
-            title: event.title,
-            isOnline: event.isOnline,
-            timeDisplay: event.timeDisplay,
-            familiesSignedUp: signupCount,
-          );
-        } else {
-          _scheduledEvent = null;
-        }
+        _scheduledEvent = scheduled;
       });
     } catch (_) {
       if (!mounted) return;
