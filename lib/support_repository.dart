@@ -10,6 +10,7 @@ import 'address_place.dart';
 import 'support_recommendations.dart';
 import 'request_duration.dart';
 import 'request_priority.dart';
+import 'partner_share_repository.dart';
 import 'peer_group_repository.dart';
 import 'volunteer_matching.dart';
 import 'volunteer_repository.dart';
@@ -171,7 +172,7 @@ class SupportRepository {
       {'partnerWellnessSnapshot': FieldValue.delete()},
       SetOptions(merge: true),
     );
-    await FirebaseFirestore.instance.collection('partner_shares').doc(uid).delete();
+    await PartnerShareRepository.instance.deleteShareAndHistory(uid);
   }
 
   Future<void> syncPartnerWellnessSnapshot({
@@ -184,23 +185,20 @@ class SupportRepository {
     if (uid == null) return;
 
     final topStress = stressSources.take(3).toList();
-    await FirebaseFirestore.instance.collection('users').doc(uid).set(
-      {
-        'partnerWellnessSnapshot': {
-          'score': score,
-          'dayKey': dayKey,
-          'topStressSources': topStress,
-          'updatedAt': FieldValue.serverTimestamp(),
-        },
-      },
-      SetOptions(merge: true),
-    );
-    await FirebaseFirestore.instance.collection('partner_shares').doc(uid).set({
+    final payload = {
       'score': score,
       'dayKey': dayKey,
       'topStressSources': topStress,
       'updatedAt': FieldValue.serverTimestamp(),
-    });
+    };
+    await FirebaseFirestore.instance.collection('users').doc(uid).set(
+      {'partnerWellnessSnapshot': payload},
+      SetOptions(merge: true),
+    );
+    final shareRef =
+        FirebaseFirestore.instance.collection('partner_shares').doc(uid);
+    await shareRef.set(payload);
+    await shareRef.collection('history').doc(dayKey).set(payload);
   }
 
   Future<void> syncLatestPartnerWellnessSnapshot() async {
@@ -214,34 +212,73 @@ class SupportRepository {
           .doc(uid)
           .collection('daily_check_ins')
           .orderBy('createdAt', descending: true)
-          .limit(1)
+          .limit(45)
           .get();
       if (snap.docs.isEmpty) return;
-      final data = snap.docs.first.data();
-      final score = (data['score'] as num?)?.round();
-      if (score == null) return;
 
-      var dayKeyValue = data['dayKey'] as String?;
-      if (dayKeyValue == null || dayKeyValue.isEmpty) {
-        final created = data['createdAt'];
-        if (created is Timestamp) {
-          final local = created.toDate().toLocal();
-          dayKeyValue = FamilyCheckInLoader.dayKey(
-            DateTime(local.year, local.month, local.day),
-          );
-        } else {
-          dayKeyValue = FamilyCheckInLoader.dayKey(DateTime.now());
+      // Keep one score per day (latest check-in that day wins).
+      final byDay = <String, ({int score, List<String> stress})>{};
+      for (final doc in snap.docs) {
+        final data = doc.data();
+        final score = (data['score'] as num?)?.round();
+        if (score == null) continue;
+
+        var dayKeyValue = data['dayKey'] as String?;
+        if (dayKeyValue == null || dayKeyValue.isEmpty) {
+          final created = data['createdAt'];
+          if (created is Timestamp) {
+            final local = created.toDate().toLocal();
+            dayKeyValue = FamilyCheckInLoader.dayKey(
+              DateTime(local.year, local.month, local.day),
+            );
+          } else {
+            continue;
+          }
         }
+        final sources = data['stressSources'];
+        final stressList = sources is List
+            ? sources
+                .map((e) => e.toString())
+                .where((s) => s.isNotEmpty)
+                .take(3)
+                .toList()
+            : <String>[];
+        // Docs are newest-first; first write for a day wins.
+        byDay.putIfAbsent(
+          dayKeyValue,
+          () => (score: score, stress: stressList),
+        );
       }
-      final sources = data['stressSources'];
-      final stressList = sources is List
-          ? sources.map((e) => e.toString()).where((s) => s.isNotEmpty).toList()
-          : <String>[];
-      await syncPartnerWellnessSnapshot(
-        score: score,
-        dayKey: dayKeyValue,
-        stressSources: stressList,
+      if (byDay.isEmpty) return;
+
+      final days = byDay.keys.toList()..sort();
+      final shareRef =
+          FirebaseFirestore.instance.collection('partner_shares').doc(uid);
+      final batch = FirebaseFirestore.instance.batch();
+      for (final day in days) {
+        final row = byDay[day]!;
+        batch.set(shareRef.collection('history').doc(day), {
+          'score': row.score,
+          'dayKey': day,
+          'topStressSources': row.stress,
+          'updatedAt': FieldValue.serverTimestamp(),
+        });
+      }
+      final latestDay = days.last;
+      final latest = byDay[latestDay]!;
+      final latestPayload = {
+        'score': latest.score,
+        'dayKey': latestDay,
+        'topStressSources': latest.stress,
+        'updatedAt': FieldValue.serverTimestamp(),
+      };
+      batch.set(shareRef, latestPayload);
+      batch.set(
+        FirebaseFirestore.instance.collection('users').doc(uid),
+        {'partnerWellnessSnapshot': latestPayload},
+        SetOptions(merge: true),
       );
+      await batch.commit();
     } catch (_) {}
   }
 

@@ -39,14 +39,18 @@ If `config/email` is missing, invites still work in-app; email is skipped with a
 |-------|---------|
 | `supportEmail` | Shown on Help page |
 | `inviteHelpUrl` | Link appended to invite emails |
+| `privacyPolicyUrl` | Optional; opens instead of in-app Privacy Policy |
+| `termsOfServiceUrl` | Optional; opens instead of in-app Terms |
 
 Example:
 
 ```json
 {
   "supportEmail": "support@yourdomain.com",
-  "inviteHelpUrl": "https://yourdomain.com/care-signal"
+  "inviteHelpUrl": "https://yourdomain.com/care-signal",
+  "privacyPolicyUrl": "https://yourdomain.com/privacy",
+  "termsOfServiceUrl": "https://yourdomain.com/terms"
 }
 ```
 
-**Security:** `config/email` is not readable from the mobile app (Firestore rules deny client access). Only Cloud Functions read it via the Admin SDK.
+**Security:** Clients may only read `config/app` and `config/transport_coverage`. `config/email` (SendGrid key) is Admin SDK–only — never put secrets in `config/app`.

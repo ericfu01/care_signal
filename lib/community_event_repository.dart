@@ -17,10 +17,9 @@ class CommunityEventRepository {
         .orderBy('startsAt')
         .snapshots()
         .map((snap) {
-      final now = DateTime.now();
       return snap.docs
           .map(CommunityEvent.fromDoc)
-          .where((event) => event.startsAt.isAfter(now))
+          .where((event) => event.isVisibleToFamilies)
           .toList();
     });
   }
@@ -63,6 +62,15 @@ class CommunityEventRepository {
   }) async {
     final uid = FirebaseAuth.instance.currentUser?.uid;
     if (uid == null) throw StateError('Sign in to sign up.');
+
+    final eventSnap = await _events.doc(eventId).get();
+    if (!eventSnap.exists) {
+      throw StateError('This event is no longer available.');
+    }
+    final event = CommunityEvent.fromDoc(eventSnap);
+    if (event.cancelled || !event.published) {
+      throw StateError('This event has been cancelled or unpublished.');
+    }
 
     final signupRef = _events.doc(eventId).collection('signups').doc(uid);
     final existing = await signupRef.get();
@@ -128,10 +136,9 @@ class CommunityEventRepository {
         .orderBy('startsAt')
         .limit(12)
         .get();
-    final now = DateTime.now();
     for (final doc in snap.docs) {
       final event = CommunityEvent.fromDoc(doc);
-      if (event.startsAt.isAfter(now)) return event;
+      if (event.isVisibleToFamilies) return event;
     }
     return null;
   }
@@ -142,6 +149,45 @@ class CommunityEventRepository {
   }) async {
     await _events.doc(eventId).update({
       'published': published,
+      'updatedAt': FieldValue.serverTimestamp(),
+    });
+  }
+
+  Future<void> updateEvent({
+    required String eventId,
+    required String title,
+    required DateTime startsAt,
+    required bool isOnline,
+    required String timeDisplay,
+    String? description,
+    bool published = true,
+  }) async {
+    final event = CommunityEvent(
+      id: eventId,
+      title: title.trim(),
+      startsAt: startsAt,
+      isOnline: isOnline,
+      timeDisplay: timeDisplay.trim(),
+      description: description?.trim(),
+      published: published,
+    );
+    await _events.doc(eventId).set(event.toUpdateMap(), SetOptions(merge: true));
+  }
+
+  Future<void> cancelEvent(String eventId) async {
+    await _events.doc(eventId).update({
+      'cancelled': true,
+      'published': false,
+      'cancelledAt': FieldValue.serverTimestamp(),
+      'updatedAt': FieldValue.serverTimestamp(),
+    });
+  }
+
+  Future<void> restoreEvent(String eventId) async {
+    await _events.doc(eventId).update({
+      'cancelled': false,
+      'published': true,
+      'cancelledAt': FieldValue.delete(),
       'updatedAt': FieldValue.serverTimestamp(),
     });
   }

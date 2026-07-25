@@ -1,13 +1,17 @@
 import 'dart:async';
+import 'dart:typed_data';
 
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
+import 'package:image_picker/image_picker.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import 'account_deletion_service.dart';
 import 'app_config_service.dart';
 import 'auth_gate.dart';
 import 'data_export_service.dart';
+import 'feedback_photo_service.dart';
+import 'legal_pages.dart';
 import 'staff_repository.dart';
 
 class ExportDataPage extends StatefulWidget {
@@ -151,8 +155,10 @@ class HelpPage extends StatefulWidget {
 
 class _HelpPageState extends State<HelpPage> {
   final _feedbackController = TextEditingController();
+  final _imagePicker = ImagePicker();
+  final _photoBytes = <Uint8List>[];
   bool _sending = false;
-  String _supportEmail = AppConfig.defaultSupportEmail;
+  String? _supportEmail;
 
   @override
   void initState() {
@@ -173,9 +179,11 @@ class _HelpPageState extends State<HelpPage> {
   }
 
   Future<void> _emailSupport() async {
+    final email = _supportEmail;
+    if (email == null || email.isEmpty) return;
     final uri = Uri(
       scheme: 'mailto',
-      path: _supportEmail,
+      path: email,
       queryParameters: {
         'subject': 'Care Signal support',
       },
@@ -183,9 +191,47 @@ class _HelpPageState extends State<HelpPage> {
     if (!await launchUrl(uri)) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Email us at $_supportEmail')),
+        SnackBar(content: Text('Email us at $email')),
       );
     }
+  }
+
+  Future<void> _pickPhotos() async {
+    final remaining = FeedbackPhotoService.maxPhotos - _photoBytes.length;
+    if (remaining <= 0) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            'You can attach up to ${FeedbackPhotoService.maxPhotos} photos.',
+          ),
+        ),
+      );
+      return;
+    }
+
+    final picked = await _imagePicker.pickMultiImage(
+      imageQuality: 75,
+      maxWidth: 1600,
+    );
+    if (picked.isEmpty) return;
+
+    final added = <Uint8List>[];
+    for (final file in picked.take(remaining)) {
+      final bytes = await file.readAsBytes();
+      if (bytes.isEmpty) continue;
+      if (bytes.length > FeedbackPhotoService.maxBytes) {
+        if (!mounted) return;
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('One photo was too large and was skipped.'),
+          ),
+        );
+        continue;
+      }
+      added.add(bytes);
+    }
+    if (!mounted || added.isEmpty) return;
+    setState(() => _photoBytes.addAll(added));
   }
 
   Future<void> _sendFeedback() async {
@@ -196,9 +242,11 @@ class _HelpPageState extends State<HelpPage> {
       await StaffRepository.instance.submitFeedback(
         message: message,
         email: FirebaseAuth.instance.currentUser?.email,
+        photoBytes: List<Uint8List>.from(_photoBytes),
       );
       if (!mounted) return;
       _feedbackController.clear();
+      setState(() => _photoBytes.clear());
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Thanks — your feedback was sent.')),
       );
@@ -259,18 +307,48 @@ class _HelpPageState extends State<HelpPage> {
                 ),
           ),
           const SizedBox(height: 8),
-          Text(
-            'Email $_supportEmail with a short description of the problem. '
-            'We typically reply within one business day.',
-            style: Theme.of(context).textTheme.bodyMedium?.copyWith(height: 1.4),
-          ),
-          const SizedBox(height: 12),
-          OutlinedButton.icon(
-            onPressed: _emailSupport,
-            icon: const Icon(Icons.email_outlined),
-            label: const Text('Email support'),
-          ),
+          if (_supportEmail != null) ...[
+            Text(
+              'Email $_supportEmail with a short description of the problem. '
+              'We typically reply within one business day.',
+              style: Theme.of(context).textTheme.bodyMedium?.copyWith(height: 1.4),
+            ),
+            const SizedBox(height: 12),
+            OutlinedButton.icon(
+              onPressed: _emailSupport,
+              icon: const Icon(Icons.email_outlined),
+              label: const Text('Email support'),
+            ),
+          ] else ...[
+            Text(
+              'Use the feedback form below to reach the Care Signal team. '
+              'We typically reply within one business day.',
+              style: Theme.of(context).textTheme.bodyMedium?.copyWith(height: 1.4),
+            ),
+          ],
           const SizedBox(height: 28),
+          Text(
+            'Legal',
+            style: Theme.of(context).textTheme.titleSmall?.copyWith(
+                  fontWeight: FontWeight.w600,
+                ),
+          ),
+          const SizedBox(height: 8),
+          ListTile(
+            contentPadding: EdgeInsets.zero,
+            leading: const Icon(Icons.privacy_tip_outlined),
+            title: const Text('Privacy Policy'),
+            trailing: const Icon(Icons.chevron_right),
+            onTap: () => openPrivacyPolicy(context),
+          ),
+          ListTile(
+            contentPadding: EdgeInsets.zero,
+            leading: const Icon(Icons.description_outlined),
+            title: const Text('Terms of Service'),
+            trailing: const Icon(Icons.chevron_right),
+            onTap: () => openTermsOfService(context),
+          ),
+          const SizedBox(height: 20),
           Text(
             'Send feedback',
             style: Theme.of(context).textTheme.titleSmall?.copyWith(
@@ -286,6 +364,83 @@ class _HelpPageState extends State<HelpPage> {
             ),
             minLines: 3,
             maxLines: 5,
+          ),
+          const SizedBox(height: 12),
+          Text(
+            'Photos (optional)',
+            style: Theme.of(context).textTheme.titleSmall?.copyWith(
+                  fontWeight: FontWeight.w600,
+                ),
+          ),
+          const SizedBox(height: 4),
+          Text(
+            'Add up to ${FeedbackPhotoService.maxPhotos} screenshots or photos '
+            'that show the problem.',
+            style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                  color: Colors.black54,
+                ),
+          ),
+          const SizedBox(height: 8),
+          if (_photoBytes.isNotEmpty)
+            Padding(
+              padding: const EdgeInsets.only(bottom: 8),
+              child: Wrap(
+                spacing: 8,
+                runSpacing: 8,
+                children: [
+                  for (var i = 0; i < _photoBytes.length; i++)
+                    Stack(
+                      children: [
+                        ClipRRect(
+                          borderRadius: BorderRadius.circular(8),
+                          child: Image.memory(
+                            _photoBytes[i],
+                            width: 72,
+                            height: 72,
+                            fit: BoxFit.cover,
+                          ),
+                        ),
+                        Positioned(
+                          top: 0,
+                          right: 0,
+                          child: IconButton(
+                            visualDensity: VisualDensity.compact,
+                            padding: EdgeInsets.zero,
+                            constraints: const BoxConstraints(
+                              minWidth: 28,
+                              minHeight: 28,
+                            ),
+                            onPressed: _sending
+                                ? null
+                                : () => setState(() => _photoBytes.removeAt(i)),
+                            icon: const CircleAvatar(
+                              radius: 12,
+                              backgroundColor: Colors.black54,
+                              child: Icon(
+                                Icons.close,
+                                size: 14,
+                                color: Colors.white,
+                              ),
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                ],
+              ),
+            ),
+          OutlinedButton.icon(
+            onPressed: _sending ||
+                    _photoBytes.length >= FeedbackPhotoService.maxPhotos
+                ? null
+                : _pickPhotos,
+            icon: const Icon(Icons.add_a_photo_outlined),
+            label: Text(
+              _photoBytes.isEmpty
+                  ? 'Add photos'
+                  : 'Add more (${_photoBytes.length}/'
+                      '${FeedbackPhotoService.maxPhotos})',
+            ),
           ),
           const SizedBox(height: 12),
           FilledButton.icon(

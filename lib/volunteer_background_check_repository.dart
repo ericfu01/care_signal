@@ -39,10 +39,51 @@ class VolunteerBackgroundCheckRepository {
   DocumentReference<Map<String, dynamic>> _applicationRef(String uid) =>
       _userRef(uid).collection('background_check_application').doc(_applicationDocId);
 
+  Future<VolunteerBackgroundCheckApplication?> fetchCurrentApplication([
+    String? forUid,
+  ]) async {
+    final uid = forUid ?? await _uid();
+    if (uid == null) return null;
+    final snap = await _applicationRef(uid).get();
+    if (!snap.exists) return null;
+    final data = snap.data() ?? {};
+    final dob = data['dateOfBirth'];
+    if (dob is! Timestamp) return null;
+    return VolunteerBackgroundCheckApplication(
+      legalFirstName: (data['legalFirstName'] as String?)?.trim() ?? '',
+      legalLastName: (data['legalLastName'] as String?)?.trim() ?? '',
+      dateOfBirth: dob.toDate(),
+      streetAddress: (data['streetAddress'] as String?)?.trim() ?? '',
+      city: (data['city'] as String?)?.trim() ?? '',
+      state: (data['state'] as String?)?.trim() ?? '',
+      zip: (data['zip'] as String?)?.trim() ?? '',
+    );
+  }
+
+  Stream<VolunteerBackgroundCheckApplication?> watchCurrentApplication(
+    String uid,
+  ) {
+    return _applicationRef(uid).snapshots().map((snap) {
+      if (!snap.exists) return null;
+      final data = snap.data() ?? {};
+      final dob = data['dateOfBirth'];
+      if (dob is! Timestamp) return null;
+      return VolunteerBackgroundCheckApplication(
+        legalFirstName: (data['legalFirstName'] as String?)?.trim() ?? '',
+        legalLastName: (data['legalLastName'] as String?)?.trim() ?? '',
+        dateOfBirth: dob.toDate(),
+        streetAddress: (data['streetAddress'] as String?)?.trim() ?? '',
+        city: (data['city'] as String?)?.trim() ?? '',
+        state: (data['state'] as String?)?.trim() ?? '',
+        zip: (data['zip'] as String?)?.trim() ?? '',
+      );
+    });
+  }
+
   Future<void> submitApplication(VolunteerBackgroundCheckApplication application) async {
     final uid = await _uid();
     if (uid == null) {
-      throw StateError('Sign in to submit a background check.');
+      throw StateError('Sign in to submit volunteer screening.');
     }
 
     final first = application.legalFirstName.trim();

@@ -12,6 +12,7 @@ class CommunityEvent {
     required this.timeDisplay,
     this.description,
     this.published = true,
+    this.cancelled = false,
     this.signupCount = 0,
   });
 
@@ -22,6 +23,7 @@ class CommunityEvent {
   final String timeDisplay;
   final String? description;
   final bool published;
+  final bool cancelled;
   final int signupCount;
 
   String get monthAbbrev {
@@ -35,6 +37,8 @@ class CommunityEvent {
   String get day => '${startsAt.day}';
 
   bool get isUpcoming => startsAt.isAfter(DateTime.now());
+
+  bool get isVisibleToFamilies => published && !cancelled && isUpcoming;
 
   ScheduledEvent toScheduledEvent({int? familiesSignedUp}) {
     return ScheduledEvent(
@@ -58,6 +62,7 @@ class CommunityEvent {
       timeDisplay: (data['timeDisplay'] as String?)?.trim() ?? '',
       description: (data['description'] as String?)?.trim(),
       published: data['published'] as bool? ?? true,
+      cancelled: data['cancelled'] as bool? ?? false,
       signupCount: (data['signupCount'] as num?)?.round() ?? 0,
     );
   }
@@ -73,9 +78,21 @@ class CommunityEvent {
         if (description != null && description!.isNotEmpty)
           'description': description,
         'published': published,
+        'cancelled': false,
         'signupCount': 0,
         'createdByUid': createdByUid,
         'createdAt': FieldValue.serverTimestamp(),
+        'updatedAt': FieldValue.serverTimestamp(),
+      };
+
+  Map<String, dynamic> toUpdateMap() => {
+        'title': title,
+        'startsAt': Timestamp.fromDate(startsAt),
+        'isOnline': isOnline,
+        'timeDisplay': timeDisplay,
+        'description':
+            description != null && description!.isNotEmpty ? description : FieldValue.delete(),
+        'published': published,
         'updatedAt': FieldValue.serverTimestamp(),
       };
 }

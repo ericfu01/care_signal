@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 
@@ -9,7 +11,7 @@ import 'volunteer_background_check_repository.dart';
 import 'volunteer_home_page.dart';
 import 'volunteer_setup_page.dart';
 
-/// Blocks volunteer access until a background check is submitted and approved.
+/// Blocks volunteer access until volunteer screening is submitted and approved.
 class VolunteerBackgroundCheckPage extends StatefulWidget {
   const VolunteerBackgroundCheckPage({super.key});
 
@@ -32,6 +34,7 @@ class _VolunteerBackgroundCheckPageState
   DateTime? _dateOfBirth;
   bool _consent = false;
   bool _submitting = false;
+  bool _prefilled = false;
 
   @override
   void dispose() {
@@ -42,6 +45,25 @@ class _VolunteerBackgroundCheckPageState
     _stateController.dispose();
     _zipController.dispose();
     super.dispose();
+  }
+
+  Future<void> _prefillFromPreviousApplication() async {
+    if (_prefilled) return;
+    _prefilled = true;
+    try {
+      final previous = await VolunteerBackgroundCheckRepository.instance
+          .fetchCurrentApplication();
+      if (previous == null || !mounted) return;
+      setState(() {
+        _legalFirstController.text = previous.legalFirstName;
+        _legalLastController.text = previous.legalLastName;
+        _streetController.text = previous.streetAddress;
+        _cityController.text = previous.city;
+        _stateController.text = previous.state;
+        _zipController.text = previous.zip;
+        _dateOfBirth = previous.dateOfBirth;
+      });
+    } catch (_) {}
   }
 
   Future<void> _pickDateOfBirth() async {
@@ -68,7 +90,7 @@ class _VolunteerBackgroundCheckPageState
     if (!_consent) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
-          content: Text('Consent to the background check to continue.'),
+          content: Text('Confirm consent to continue.'),
         ),
       );
       return;
@@ -146,7 +168,12 @@ class _VolunteerBackgroundCheckPageState
           if (VolunteerBackgroundCheckStatus.isPending(status)) {
             return _PendingView(
               displayName: profile?.displayName ?? 'Volunteer',
+              submittedAt: profile?.backgroundCheckSubmittedAt,
             );
+          }
+
+          if (VolunteerBackgroundCheckStatus.isRejected(status)) {
+            unawaited(_prefillFromPreviousApplication());
           }
 
           return _ApplicationForm(
@@ -172,9 +199,22 @@ class _VolunteerBackgroundCheckPageState
 }
 
 class _PendingView extends StatelessWidget {
-  const _PendingView({required this.displayName});
+  const _PendingView({
+    required this.displayName,
+    this.submittedAt,
+  });
 
   final String displayName;
+  final DateTime? submittedAt;
+
+  String _formatSubmittedAt() {
+    final value = submittedAt;
+    if (value == null) return 'Submitted — waiting for review';
+    final local = value.toLocal();
+    return 'Submitted ${local.month}/${local.day}/${local.year} '
+        'at ${local.hour.toString().padLeft(2, '0')}:'
+        '${local.minute.toString().padLeft(2, '0')}';
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -184,13 +224,13 @@ class _PendingView extends StatelessWidget {
       children: [
         const SizedBox(height: 24),
         Icon(
-          Icons.verified_user_outlined,
+          Icons.hourglass_top_rounded,
           size: 72,
           color: _VolunteerBackgroundCheckPageState._accent,
         ),
         const SizedBox(height: 20),
         Text(
-          'Running your background check',
+          'Under review',
           textAlign: TextAlign.center,
           style: theme.textTheme.headlineSmall?.copyWith(
             fontWeight: FontWeight.bold,
@@ -198,17 +238,39 @@ class _PendingView extends StatelessWidget {
         ),
         const SizedBox(height: 10),
         Text(
-          'Thanks, $displayName. We are screening your application to help keep '
-          'families safe. This usually takes a few moments.',
+          'Thanks, $displayName. Your volunteer screening was submitted and is '
+          'waiting for a Care Signal staff member to review it.',
           textAlign: TextAlign.center,
           style: theme.textTheme.bodyLarge?.copyWith(
             color: Colors.black54,
             height: 1.45,
           ),
         ),
-        const SizedBox(height: 28),
-        const Center(child: CircularProgressIndicator()),
-        const SizedBox(height: 28),
+        const SizedBox(height: 20),
+        Container(
+          padding: const EdgeInsets.all(14),
+          decoration: BoxDecoration(
+            color: Colors.orange.shade50,
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(color: Colors.orange.shade200),
+          ),
+          child: Row(
+            children: [
+              Icon(Icons.schedule, color: Colors.orange.shade800),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Text(
+                  _formatSubmittedAt(),
+                  style: TextStyle(
+                    color: Colors.orange.shade900,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+        const SizedBox(height: 20),
         Container(
           padding: const EdgeInsets.all(16),
           decoration: BoxDecoration(
@@ -219,10 +281,18 @@ class _PendingView extends StatelessWidget {
             ),
           ),
           child: Text(
-            'You will be able to set up your volunteer profile and respond to '
-            'requests once screening is complete.',
-            style: theme.textTheme.bodyMedium?.copyWith(height: 1.4),
+            'What happens next\n'
+            '• Staff reviews your application\n'
+            '• You’ll get an in-app notification when it’s approved or needs changes\n'
+            '• After approval, you can finish volunteer setup and help families',
+            style: theme.textTheme.bodyMedium?.copyWith(height: 1.45),
           ),
+        ),
+        const SizedBox(height: 16),
+        Text(
+          'You can close the app and come back anytime — this screen updates automatically.',
+          textAlign: TextAlign.center,
+          style: theme.textTheme.bodySmall?.copyWith(color: Colors.black45),
         ),
       ],
     );
@@ -273,15 +343,16 @@ class _ApplicationForm extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           Text(
-            'Background check required',
+            'Volunteer screening required',
             style: theme.textTheme.titleLarge?.copyWith(
               fontWeight: FontWeight.bold,
             ),
           ),
           const SizedBox(height: 8),
           Text(
-            'Before you can volunteer with families or host peer groups, we run a '
-            'background check to help keep the community safe.',
+            'Before you can volunteer with families or host peer groups, Care Signal '
+            'staff review your application. This is an internal safety screen — not '
+            'a third-party background check service.',
             style: theme.textTheme.bodyMedium?.copyWith(
               color: Colors.black54,
               height: 1.4,
@@ -296,12 +367,35 @@ class _ApplicationForm extends StatelessWidget {
                 borderRadius: BorderRadius.circular(12),
                 border: Border.all(color: Colors.red.shade200),
               ),
-              child: Text(
-                rejectionNote?.trim().isNotEmpty == true
-                    ? rejectionNote!.trim()
-                    : 'Your previous application could not be approved. '
-                        'Review your information and submit again, or contact support.',
-                style: TextStyle(color: Colors.red.shade900, height: 1.35),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    'Action needed — application not approved',
+                    style: TextStyle(
+                      color: Colors.red.shade900,
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                  const SizedBox(height: 6),
+                  Text(
+                    rejectionNote?.trim().isNotEmpty == true
+                        ? rejectionNote!.trim()
+                        : 'Your previous application could not be approved. '
+                            'Update your information below and resubmit.',
+                    style: TextStyle(color: Colors.red.shade900, height: 1.35),
+                  ),
+                  const SizedBox(height: 8),
+                  Text(
+                    'Your previous details are filled in where possible. '
+                    'Fix anything noted above, confirm consent, then resubmit.',
+                    style: TextStyle(
+                      color: Colors.red.shade800,
+                      height: 1.35,
+                      fontSize: 13,
+                    ),
+                  ),
+                ],
               ),
             ),
           ],
@@ -410,8 +504,8 @@ class _ApplicationForm extends StatelessWidget {
             contentPadding: EdgeInsets.zero,
             controlAffinity: ListTileControlAffinity.leading,
             title: const Text(
-              'I authorize Care Signal to run a background check and confirm the '
-              'information above is accurate.',
+              'I confirm the information above is accurate and authorize Care Signal '
+              'staff to review my volunteer screening application.',
             ),
           ),
           const SizedBox(height: 12),
@@ -426,7 +520,9 @@ class _ApplicationForm extends StatelessWidget {
                     width: 22,
                     child: CircularProgressIndicator(strokeWidth: 2),
                   )
-                : Text(rejected ? 'Submit again' : 'Submit for screening'),
+                : Text(
+                    rejected ? 'Resubmit application' : 'Submit for screening',
+                  ),
           ),
         ],
       ),

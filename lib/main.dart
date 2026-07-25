@@ -6,6 +6,7 @@ import 'auth_gate.dart';
 import 'firebase_options.dart';
 import 'openai_config.dart';
 import 'notification_service.dart';
+import 'places_config.dart';
 import 'presence_service.dart';
 import 'spotify_config.dart';
 
@@ -15,6 +16,7 @@ Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
   await initOpenAiEnv();
   await initSpotifyEnv();
+  await initPlacesEnv();
   if (kDebugMode) {
     debugPrint(
       '[CareSignal][OpenAI] '
@@ -23,6 +25,10 @@ Future<void> main() async {
     debugPrint(
       '[CareSignal][Spotify] '
       '${isSpotifyApiConfigured ? 'API configured' : 'API missing (links only)'}',
+    );
+    debugPrint(
+      '[CareSignal][Places] '
+      '${isGooglePlacesConfigured ? 'API key configured' : 'API key missing (Nominatim fallback)'}',
     );
   }
   await Firebase.initializeApp(

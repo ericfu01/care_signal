@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 
 import 'family_insights_copy.dart';
@@ -649,7 +650,9 @@ class _WeeklySummaryCard extends StatelessWidget {
               ] else if (showAiSetupHint) ...[
                 const SizedBox(height: 12),
                 Text(
-                  'Add OPENAI_API_KEY in assets/openai.local.env for an AI-written summary.',
+                  kDebugMode
+                      ? 'Add OPENAI_API_KEY in assets/openai.local.env for an AI-written summary.'
+                      : 'AI summary is unavailable right now. Your check-in trends below still work.',
                   style: Theme.of(context).textTheme.bodySmall?.copyWith(
                         color: Colors.white.withValues(alpha: 0.85),
                         height: 1.35,

@@ -42,20 +42,17 @@ class OpenAiSupportChatAssistant implements SupportChatAssistant {
   }
 }
 
-/// Placeholder when no API key is configured.
+/// Honest fallback when OpenAI is not configured (no fake assistant replies).
 class StubSupportChatAssistant implements SupportChatAssistant {
   @override
   Future<String> replyToUserMessage(
     String userMessage, {
     List<Map<String, String>>? openAiHistory,
   }) async {
-    // Tiny delay so the UI feels like a response is being generated.
-    await Future<void>.delayed(const Duration(milliseconds: 450));
-    final t = userMessage.trim();
-    if (t.isEmpty) {
-      return 'Go ahead whenever you are ready — what is on your mind?';
-    }
-    final preview = t.length > 160 ? '${t.substring(0, 157)}...' : t;
-    return 'Thanks — I have noted this:\n\n"$preview"\n\nWhat would you like to do next?';
+    await Future<void>.delayed(const Duration(milliseconds: 250));
+    return 'AI chat is unavailable right now.\n\n'
+        'For help from the Care Signal team, open **Profile → Help** and send '
+        'feedback (you can attach screenshots). If this is an emergency, contact '
+        'local emergency services or use Crisis Line under Support.';
   }
 }

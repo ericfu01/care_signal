@@ -3,26 +3,35 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 /// App-wide config from Firestore `config/app`.
 class AppConfig {
   const AppConfig({
-    required this.supportEmail,
+    this.supportEmail,
     this.inviteHelpUrl,
+    this.privacyPolicyUrl,
+    this.termsOfServiceUrl,
   });
 
-  static const defaultSupportEmail = 'care.signal.support@example.com';
-
-  final String supportEmail;
+  /// Contact email shown on Help when set in Firestore. Null = use in-app feedback.
+  final String? supportEmail;
   final String? inviteHelpUrl;
 
+  /// Optional hosted legal URLs. When set, Profile/Help open these instead of in-app text.
+  final String? privacyPolicyUrl;
+  final String? termsOfServiceUrl;
+
   factory AppConfig.fromMap(Map<String, dynamic> data) {
-    final email = (data['supportEmail'] as String?)?.trim();
-    final helpUrl = (data['inviteHelpUrl'] as String?)?.trim();
+    String? clean(String key) {
+      final value = (data[key] as String?)?.trim();
+      return value != null && value.isNotEmpty ? value : null;
+    }
+
     return AppConfig(
-      supportEmail:
-          email != null && email.isNotEmpty ? email : defaultSupportEmail,
-      inviteHelpUrl: helpUrl != null && helpUrl.isNotEmpty ? helpUrl : null,
+      supportEmail: clean('supportEmail'),
+      inviteHelpUrl: clean('inviteHelpUrl'),
+      privacyPolicyUrl: clean('privacyPolicyUrl'),
+      termsOfServiceUrl: clean('termsOfServiceUrl'),
     );
   }
 
-  static const defaults = AppConfig(supportEmail: defaultSupportEmail);
+  static const defaults = AppConfig();
 }
 
 class AppConfigService {

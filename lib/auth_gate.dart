@@ -78,8 +78,13 @@ class _AuthenticatedShellState extends State<_AuthenticatedShell> {
   }
 
   String _routeKey(UserProfile? profile) {
+    if (profile?.isStaff == true) return 'staff_home';
+    if (profile?.isPartner == true) return 'partner_home';
     if (profile?.isVolunteer == true) {
-      return profile!.volunteerProfileComplete
+      if (profile!.backgroundCheckBlocksVolunteer) {
+        return 'volunteer_background_check';
+      }
+      return profile.volunteerProfileComplete
           ? 'volunteer_home'
           : 'volunteer_setup';
     }

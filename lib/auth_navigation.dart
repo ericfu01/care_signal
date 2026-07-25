@@ -1,4 +1,5 @@
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 
 import 'family_models.dart';
@@ -22,6 +23,20 @@ Widget homeWidgetForProfile(User user, UserProfile? profile) {
       user.displayName?.trim() ??
       'Member';
 
+  if (kDebugMode) {
+    debugPrint(
+      '[CareSignal][Auth] uid=${user.uid} accountType=${profile?.accountType} '
+      'familyId=${profile?.familyId}',
+    );
+  }
+
+  // Staff/partner take priority over family membership and volunteer lanes.
+  if (profile?.isStaff == true) {
+    return const StaffHomePage();
+  }
+  if (profile?.isPartner == true) {
+    return const PartnerHomePage();
+  }
   if (profile?.isVolunteer == true) {
     if (profile!.backgroundCheckBlocksVolunteer) {
       return const VolunteerBackgroundCheckPage();
@@ -30,28 +45,17 @@ Widget homeWidgetForProfile(User user, UserProfile? profile) {
         ? const VolunteerHomePage()
         : const VolunteerSetupPage();
   }
-  if (profile?.isStaff == true) {
-    return const StaffHomePage();
-  }
-  if (profile?.isPartner == true) {
-    return const PartnerHomePage();
-  }
   if (profile?.hasFamily == true) {
     return const HomePage();
   }
   return FamilyOnboardingPage(initialDisplayName: displayName);
 }
 
-/// After sign-in or sign-up, route by account type and profile completeness.
+/// After sign-up / profile changes, return to the root [AuthGate] route.
+///
+/// Do not push a fixed home page — that freezes routing and ignores later
+/// Firestore `accountType` updates (e.g. promoting a user to staff).
 Future<void> navigateAfterAuth(BuildContext context) async {
-  final user = FirebaseAuth.instance.currentUser;
-  if (user == null || !context.mounted) return;
-
-  final next = await homeWidgetForUser(user);
   if (!context.mounted) return;
-
-  await Navigator.of(context).pushAndRemoveUntil<void>(
-    MaterialPageRoute<void>(builder: (_) => next),
-    (route) => false,
-  );
+  Navigator.of(context).popUntil((route) => route.isFirst);
 }

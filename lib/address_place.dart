@@ -5,12 +5,16 @@ class AddressPlace {
     this.label,
     this.latitude,
     this.longitude,
+    this.placeId,
   });
 
   final String formattedAddress;
   final String? label;
   final double? latitude;
   final double? longitude;
+
+  /// Google Places `place_id` when the result came from Places Autocomplete.
+  final String? placeId;
 
   bool get hasCoordinates => latitude != null && longitude != null;
 

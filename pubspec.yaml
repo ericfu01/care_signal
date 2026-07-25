@@ -76,6 +76,7 @@ flutter:
     - assets/env.defaults
     - assets/openai.local.env
     - assets/spotify.local.env
+    - assets/places.local.env
 
   # An image asset can refer to one or more resolution-specific "variants", see
   # https://flutter.dev/to/resolution-aware-images

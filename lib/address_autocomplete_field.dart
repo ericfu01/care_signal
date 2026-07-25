@@ -77,15 +77,24 @@ class AddressAutocompleteFieldState extends State<AddressAutocompleteField> {
     }
   }
 
-  void _applyPlace(AddressPlace place, {bool notify = true}) {
+  Future<void> _applyPlace(AddressPlace place, {bool notify = true}) async {
+    var resolved = place;
+    final needsResolve = place.placeId != null && !place.hasCoordinates;
+    if (needsResolve) {
+      setState(() => _searching = true);
+      resolved = await AddressSearchService.instance.resolvePlace(place) ?? place;
+      if (!mounted) return;
+      setState(() => _searching = false);
+    }
+
     setState(() {
-      _selectedPlace = place;
-      _controller.text = place.displayLabel;
+      _selectedPlace = resolved;
+      _controller.text = resolved.displayLabel;
       _showSuggestions = false;
       _searchResults = [];
     });
     _focusNode.unfocus();
-    if (notify) widget.onPlaceChanged(place);
+    if (notify) widget.onPlaceChanged(resolved);
   }
 
   void _onTextChanged(String value) {
@@ -132,7 +141,10 @@ class AddressAutocompleteFieldState extends State<AddressAutocompleteField> {
     if (!mounted) return AddressPlace(formattedAddress: text);
 
     if (results.isNotEmpty) {
-      final best = results.first;
+      final best =
+          await AddressSearchService.instance.resolvePlace(results.first) ??
+              results.first;
+      if (!mounted) return best;
       setState(() {
         _selectedPlace = best;
         _controller.text = best.displayLabel;
@@ -144,8 +156,11 @@ class AddressAutocompleteFieldState extends State<AddressAutocompleteField> {
     }
 
     final draft = AddressPlace(formattedAddress: text);
-    widget.onPlaceChanged(draft);
-    return draft;
+    final resolved =
+        await AddressSearchService.instance.resolvePlace(draft) ?? draft;
+    if (!mounted) return resolved;
+    widget.onPlaceChanged(resolved);
+    return resolved;
   }
 
   Future<void> _runSearch(String query) async {

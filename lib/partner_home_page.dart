@@ -2,6 +2,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
 
 import 'auth_session.dart';
+import 'partner_family_detail_page.dart';
 
 class PartnerShareRecord {
   const PartnerShareRecord({
@@ -41,6 +42,12 @@ class PartnerShareRecord {
 class PartnerHomePage extends StatelessWidget {
   const PartnerHomePage({super.key});
 
+  static Color scoreColor(int score) {
+    if (score >= 70) return const Color(0xFF439A7D);
+    if (score >= 55) return const Color(0xFFF9A825);
+    return const Color(0xFFD32F2F);
+  }
+
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
@@ -78,8 +85,13 @@ class PartnerHomePage extends StatelessWidget {
               ),
             );
           }
-          final shares =
-              docs.map(PartnerShareRecord.fromDoc).toList();
+          final shares = docs.map(PartnerShareRecord.fromDoc).toList();
+          final avg = shares.isEmpty
+              ? 0
+              : (shares.map((s) => s.score).reduce((a, b) => a + b) /
+                      shares.length)
+                  .round();
+
           return ListView(
             padding: const EdgeInsets.fromLTRB(16, 16, 16, 28),
             children: [
@@ -91,10 +103,29 @@ class PartnerHomePage extends StatelessWidget {
               ),
               const SizedBox(height: 6),
               Text(
-                'Families who turned on Share with Partners appear here without names.',
+                'Families who turned on Share with Partners appear here without names. '
+                'Tap a family to see their score history.',
                 style: theme.textTheme.bodyMedium?.copyWith(
                   color: Colors.black54,
                   height: 1.35,
+                ),
+              ),
+              const SizedBox(height: 14),
+              Card(
+                child: ListTile(
+                  leading: CircleAvatar(
+                    backgroundColor: scoreColor(avg).withValues(alpha: 0.15),
+                    child: Text(
+                      '$avg',
+                      style: TextStyle(
+                        color: scoreColor(avg),
+                        fontWeight: FontWeight.w800,
+                      ),
+                    ),
+                  ),
+                  title: const Text('Network average (latest)'),
+                  subtitle: Text('${shares.length} family share'
+                      '${shares.length == 1 ? '' : 's'}'),
                 ),
               ),
               const SizedBox(height: 16),
@@ -103,24 +134,39 @@ class PartnerHomePage extends StatelessWidget {
                   margin: const EdgeInsets.only(bottom: 10),
                   child: ListTile(
                     leading: CircleAvatar(
-                      backgroundColor: _scoreColor(share.score).withValues(alpha: 0.15),
+                      backgroundColor:
+                          scoreColor(share.score).withValues(alpha: 0.15),
                       child: Text(
                         '${share.score}',
                         style: TextStyle(
-                          color: _scoreColor(share.score),
+                          color: scoreColor(share.score),
                           fontWeight: FontWeight.w800,
                         ),
                       ),
                     ),
-                    title: Text('Family ${share.familyUid.substring(0, 6)}…'),
+                    title: Text(
+                      share.familyUid.length <= 6
+                          ? 'Family ${share.familyUid}'
+                          : 'Family ${share.familyUid.substring(0, 6)}…',
+                    ),
                     subtitle: Text(
                       [
-                        if (share.dayKey.isNotEmpty) 'Latest check-in: ${share.dayKey}',
+                        if (share.dayKey.isNotEmpty)
+                          'Latest check-in: ${share.dayKey}',
                         if (share.topStressSources.isNotEmpty)
                           'Stress: ${share.topStressSources.join(', ')}',
                       ].join('\n'),
                     ),
                     isThreeLine: share.topStressSources.isNotEmpty,
+                    trailing: const Icon(Icons.show_chart),
+                    onTap: () {
+                      Navigator.of(context).push<void>(
+                        MaterialPageRoute<void>(
+                          builder: (context) =>
+                              PartnerFamilyDetailPage(share: share),
+                        ),
+                      );
+                    },
                   ),
                 );
               }),
@@ -129,11 +175,5 @@ class PartnerHomePage extends StatelessWidget {
         },
       ),
     );
-  }
-
-  static Color _scoreColor(int score) {
-    if (score >= 70) return const Color(0xFF439A7D);
-    if (score >= 55) return const Color(0xFFF9A825);
-    return const Color(0xFFD32F2F);
   }
 }

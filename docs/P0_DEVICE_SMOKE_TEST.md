@@ -75,7 +75,11 @@ cd /Users/ericfu/StudioProjects/care_signal
 ```
 
 Or open in browser:
-`https://us-central1-care-signal-ai.cloudfunctions.net/seedTransportCoverage?secret=care-signal-bootstrap`
+Prefer Admin SDK: `node scripts/seed-transport-coverage.js`
+
+Or HTTP (requires `SEED_SECRET` set on the Cloud Function and in your shell):
+
+`SEED_SECRET=your-secret ./scripts/seed-transport-coverage-http.sh`
 
 **Alternative (requires gcloud ADC):**
 

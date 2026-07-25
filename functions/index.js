@@ -802,7 +802,7 @@ exports.notifyFamilyRiskAlert = onDocumentCreated(
 
 /**
  * One-time bootstrap: seeds config/transport_coverage.
- * Call once after deploy. GET/POST ?secret=care-signal-bootstrap
+ * Requires SEED_SECRET env var (no default). Prefer scripts/seed-transport-coverage.js.
  */
 exports.seedTransportCoverage = onRequest(
   { region: 'us-central1' },
@@ -812,8 +812,8 @@ exports.seedTransportCoverage = onRequest(
       return;
     }
 
-    const expected = process.env.SEED_SECRET || 'care-signal-bootstrap';
-    if (req.query.secret !== expected) {
+    const expected = (process.env.SEED_SECRET || '').trim();
+    if (!expected || req.query.secret !== expected) {
       res.status(403).json({ error: 'Forbidden' });
       return;
     }
@@ -847,8 +847,8 @@ function volunteerAgeYears(birthDate, onDate) {
 }
 
 /**
- * When a volunteer submits a background check, validate the application and
- * approve volunteers who meet basic requirements (pilot screening).
+ * When a volunteer submits screening, validate the application and keep status
+ * pending for staff review (rejects incomplete / under-18 applications).
  */
 exports.processVolunteerBackgroundCheck = onDocumentUpdated(
   { document: 'users/{userId}', region: 'us-central1' },
@@ -924,7 +924,7 @@ exports.processVolunteerBackgroundCheck = onDocumentUpdated(
 );
 
 /**
- * Notify volunteers when staff approves or rejects their background check.
+ * Notify volunteers when staff approves or rejects their screening.
  */
 exports.notifyVolunteerBackgroundCheckReviewed = onDocumentUpdated(
   { document: 'users/{userId}', region: 'us-central1' },
@@ -944,11 +944,11 @@ exports.notifyVolunteerBackgroundCheckReviewed = onDocumentUpdated(
     if (status === 'approved') {
       await writeInAppNotification(db, userId, 'background_check_approved', {
         type: 'volunteer_background_check_approved',
-        title: 'Background check approved',
+        title: 'Screening approved',
         body: 'You can finish volunteer setup and start helping families.',
       });
       await sendPushToUser(db, userId, {
-        title: 'Background check approved',
+        title: 'Screening approved',
         body: 'You can finish volunteer setup and start helping families.',
         androidChannelId: 'volunteer_requests',
         data: { type: 'volunteer_background_check_approved' },

@@ -277,11 +277,15 @@ service cloud.firestore {
           );
 
       match /background_check_application/{applicationId} {
-        allow read: if signedIn() && request.auth.uid == userId;
-        allow create: if signedIn()
+        allow read: if signedIn()
+            && (
+              request.auth.uid == userId
+              || isStaffAccount()
+            );
+        allow create, update: if signedIn()
             && request.auth.uid == userId
             && applicationId == 'current';
-        allow update, delete: if false;
+        allow delete: if false;
       }
 
       match /support_messages/{messageId} {
@@ -494,7 +498,13 @@ service cloud.firestore {
     // App config readable by signed-in users (e.g. transport coverage ZIPs).
     match /community_events/{eventId} {
       allow read: if signedIn()
-          && (resource.data.published == true || isStaffAccount());
+          && (
+            isStaffAccount()
+            || (
+              resource.data.published == true
+              && resource.data.cancelled != true
+            )
+          );
       allow create, update: if isStaffAccount();
 
       match /signups/{signupUid} {
@@ -506,11 +516,36 @@ service cloud.firestore {
     match /partner_shares/{familyUid} {
       allow read: if isStaffAccount() || isPartnerAccount();
       allow create, update, delete: if signedIn() && request.auth.uid == familyUid;
+
+      match /history/{dayKey} {
+        allow read: if isStaffAccount() || isPartnerAccount();
+        allow create, update, delete: if signedIn()
+            && request.auth.uid == familyUid;
+      }
     }
 
     match /feedback/{feedbackId} {
-      allow create: if signedIn();
+      allow create: if signedIn()
+          && request.resource.data.uid == request.auth.uid
+          && request.resource.data.message is string
+          && request.resource.data.message.size() > 0;
       allow read: if isStaffAccount();
+      // Author may attach photo URLs after the initial create.
+      // Staff may resolve / reopen tickets.
+      allow update: if signedIn()
+          && (
+            (
+              resource.data.uid == request.auth.uid
+              && request.resource.data.uid == resource.data.uid
+              && request.resource.data.diff(resource.data).affectedKeys()
+                  .hasOnly(['photoUrls', 'photoCount', 'updatedAt'])
+            )
+            || (
+              isStaffAccount()
+              && request.resource.data.diff(resource.data).affectedKeys()
+                  .hasOnly(['status', 'resolvedAt', 'resolvedBy', 'updatedAt'])
+            )
+          );
     }
 
     match /staff_invites/{inviteId} {
@@ -518,8 +553,10 @@ service cloud.firestore {
       allow write: if false;
     }
 
+    // Public app settings only. Secrets (e.g. config/email) stay Admin SDK–only.
     match /config/{docId} {
-      allow read: if signedIn();
+      allow read: if signedIn()
+          && (docId == 'app' || docId == 'transport_coverage');
       allow write: if false;
     }
 

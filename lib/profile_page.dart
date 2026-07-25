@@ -3,7 +3,9 @@ import 'dart:typed_data';
 import 'package:flutter/material.dart';
 
 import 'family_member_presence_avatar.dart';
+import 'legal_pages.dart';
 import 'profile_account_pages.dart';
+import 'staff_invite_page.dart';
 
 class ProfileFamilyMember {
   const ProfileFamilyMember({
@@ -449,6 +451,36 @@ class ProfilePage extends StatelessWidget {
                       Navigator.of(context).push(
                         MaterialPageRoute<void>(
                           builder: (context) => const HelpPage(),
+                        ),
+                      );
+                    },
+                  ),
+                  Divider(height: 1, thickness: 1, color: Colors.grey.shade200),
+                  _ProfileActionRow(
+                    icon: Icons.privacy_tip_outlined,
+                    iconColor: const Color(0xFF37474F),
+                    iconBoxColor: const Color(0xFFECEFF1),
+                    label: 'Privacy Policy',
+                    onTap: () => openPrivacyPolicy(context),
+                  ),
+                  Divider(height: 1, thickness: 1, color: Colors.grey.shade200),
+                  _ProfileActionRow(
+                    icon: Icons.description_outlined,
+                    iconColor: const Color(0xFF37474F),
+                    iconBoxColor: const Color(0xFFECEFF1),
+                    label: 'Terms of Service',
+                    onTap: () => openTermsOfService(context),
+                  ),
+                  Divider(height: 1, thickness: 1, color: Colors.grey.shade200),
+                  _ProfileActionRow(
+                    icon: Icons.badge_outlined,
+                    iconColor: const Color(0xFF4527A0),
+                    iconBoxColor: const Color(0xFFEDE7F6),
+                    label: 'Staff access code',
+                    onTap: () {
+                      Navigator.of(context).push(
+                        MaterialPageRoute<void>(
+                          builder: (context) => const StaffInvitePage(),
                         ),
                       );
                     },

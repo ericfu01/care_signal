@@ -700,7 +700,15 @@ class _TransportationRequestPageState extends State<TransportationRequestPage> {
     );
   }
 
-  void _onZipChanged(String _) => setState(() {});
+  void _onZipChanged(String _) {
+    setState(() {
+      if (!_isCovered) {
+        _needsNow = true;
+        _scheduleError = null;
+        _timeSuggestions = const [];
+      }
+    });
+  }
 
   Future<void> _pickDate() async {
     final now = DateTime.now();
@@ -910,73 +918,6 @@ class _TransportationRequestPageState extends State<TransportationRequestPage> {
     }
   }
 
-  Future<void> _submitFollowUpRequest() async {
-    if (!_hasValidZip) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Enter a valid 5-digit ZIP code.')),
-      );
-      return;
-    }
-
-    DateTime? scheduledAt;
-    if (!_needsNow && _date != null && _time != null) {
-      scheduledAt = DateTime(
-        _date!.year,
-        _date!.month,
-        _date!.day,
-        _time!.hour,
-        _time!.minute,
-      );
-    }
-
-    final pickup = _showAddressFields ? await _resolvePickup() : null;
-    final destination =
-        _showAddressFields ? await _resolveDestination() : null;
-
-    if (_showAddressFields && !_hasAddress(pickup)) {
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Enter a pickup address.')),
-      );
-      return;
-    }
-
-    setState(() => _submitting = true);
-    try {
-      await SupportRepository.instance.submitTransportationRequest(
-        needsNow: _needsNow,
-        scheduledAt: scheduledAt,
-        pickupPlace: pickup,
-        destinationPlace: destination,
-        zipCode: _normalizedZip,
-        volunteerCoverageAvailable: false,
-        durationMinutes: _durationMinutes,
-        urgent: _urgent,
-        followUpOnly: true,
-      );
-      if (pickup != null || destination != null) {
-        await _persistRideAddresses(pickup: pickup, destination: destination);
-      }
-      if (!mounted) return;
-      widget.onSubmitted?.call();
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text(
-            'Saved for follow-up — our team will reach out about ride options.',
-          ),
-        ),
-      );
-      Navigator.of(context).pop();
-    } catch (e) {
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Could not save request: $e')),
-      );
-    } finally {
-      if (mounted) setState(() => _submitting = false);
-    }
-  }
-
   Widget _coverageBanner(ThemeData theme) {
     if (!_hasValidZip) {
       return Container(
@@ -1046,8 +987,9 @@ class _TransportationRequestPageState extends State<TransportationRequestPage> {
           const SizedBox(width: 10),
           Expanded(
             child: Text(
-              'No volunteer drivers near ZIP $_normalizedZip yet. '
-              'For urgent rides, try Uber or Lyft below. You can still save a request for our team to follow up.',
+              'We are currently expanding our services. Transportation volunteers '
+              'are not available in your area yet (ZIP $_normalizedZip). '
+              'Please use Uber or Lyft below.',
               style: theme.textTheme.bodyMedium?.copyWith(
                 color: Colors.black87,
                 height: 1.4,
@@ -1212,7 +1154,19 @@ class _TransportationRequestPageState extends State<TransportationRequestPage> {
                   ),
                   const SizedBox(height: 16),
                   _coverageBanner(theme),
-                  if (_hasValidZip) ...[
+                  if (_hasValidZip && !_isCovered) ...[
+                    const SizedBox(height: 24),
+                    Text(
+                      'We are currently expanding our services, and transportation '
+                      'is unavailable in your area right now. Please use Uber or Lyft.',
+                      style: theme.textTheme.bodyMedium?.copyWith(
+                        color: Colors.black54,
+                        height: 1.4,
+                      ),
+                    ),
+                    const SizedBox(height: 16),
+                    _rideshareButtons(),
+                  ] else if (_hasValidZip) ...[
                     const SizedBox(height: 24),
                     Text(
                       'When do you need a ride?',
@@ -1243,27 +1197,6 @@ class _TransportationRequestPageState extends State<TransportationRequestPage> {
                         });
                       },
                     ),
-                    if (_isCovered && _needsNow) ...[
-                      const SizedBox(height: 12),
-                      Text(
-                        'We will match you with the next available volunteer driver.',
-                        style: theme.textTheme.bodyMedium?.copyWith(
-                          color: Colors.black54,
-                          height: 1.4,
-                        ),
-                      ),
-                    ],
-                    if (!_isCovered && _needsNow) ...[
-                      const SizedBox(height: 12),
-                      Text(
-                        'Volunteers are not available in your area for immediate rides. '
-                        'Use Uber or Lyft below — enter your trip details in their app.',
-                        style: theme.textTheme.bodyMedium?.copyWith(
-                          color: Colors.black54,
-                          height: 1.4,
-                        ),
-                      ),
-                    ],
                     if (!_needsNow) ...[
                       const SizedBox(height: 16),
                       ListTile(
@@ -1327,16 +1260,6 @@ class _TransportationRequestPageState extends State<TransportationRequestPage> {
                               .toList(),
                         ),
                       ],
-                      if (!_isCovered) ...[
-                        const SizedBox(height: 12),
-                        Text(
-                          'Our team may coordinate through a partner — we cannot guarantee a volunteer driver.',
-                          style: theme.textTheme.bodyMedium?.copyWith(
-                            color: Colors.black54,
-                            height: 1.4,
-                          ),
-                        ),
-                      ],
                     ],
                     if (_showAddressFields) ...[
                       const SizedBox(height: 24),
@@ -1345,7 +1268,7 @@ class _TransportationRequestPageState extends State<TransportationRequestPage> {
                         label: 'Pickup location',
                         hint: 'Start typing your address…',
                         icon: Icons.trip_origin_rounded,
-                        zipCode: _hasValidZip ? _normalizedZip : null,
+                        zipCode: _normalizedZip,
                         savedPlaces: _savedAddresses,
                         initialPlace: _pickupPlace,
                         onPlaceChanged: (place) {
@@ -1372,7 +1295,7 @@ class _TransportationRequestPageState extends State<TransportationRequestPage> {
                         label: 'Destination',
                         hint: 'Doctor, school, pharmacy…',
                         icon: Icons.place_rounded,
-                        zipCode: _hasValidZip ? _normalizedZip : null,
+                        zipCode: _normalizedZip,
                         savedPlaces: _savedAddresses,
                         initialPlace: _destinationPlace,
                         onPlaceChanged: (place) {
@@ -1381,84 +1304,86 @@ class _TransportationRequestPageState extends State<TransportationRequestPage> {
                       ),
                     ],
                     const SizedBox(height: 24),
-                    RequestPriorityPicker(
-                      urgent: _urgent,
-                      onChanged: (value) => setState(() => _urgent = value),
+                    StreamBuilder<Map<String, List<UserProfile>>>(
+                      stream: VolunteerMatching.instance.watchProfilesByLane(),
+                      builder: (context, snap) {
+                        final profiles = snap.data?[
+                                VolunteerMatching.transportCatalogId] ??
+                            const <UserProfile>[];
+                        final hasAvailableNow = profiles.any(
+                          (profile) => profile.isVolunteerAvailableNow(),
+                        );
+                        final rideshareOnly = _needsNow && !hasAvailableNow;
+
+                        return Column(
+                          crossAxisAlignment: CrossAxisAlignment.stretch,
+                          children: [
+                            if (rideshareOnly) ...[
+                              Text(
+                                'No transportation volunteers are available right now. '
+                                'Please use Uber or Lyft — enter your trip details in their app.',
+                                style: theme.textTheme.bodyMedium?.copyWith(
+                                  color: Colors.black54,
+                                  height: 1.4,
+                                ),
+                              ),
+                              const SizedBox(height: 16),
+                              _rideshareButtons(),
+                            ] else ...[
+                              if (_needsNow) ...[
+                                Text(
+                                  'We will match you with the next available volunteer driver.',
+                                  style: theme.textTheme.bodyMedium?.copyWith(
+                                    color: Colors.black54,
+                                    height: 1.4,
+                                  ),
+                                ),
+                                const SizedBox(height: 20),
+                              ],
+                              RequestPriorityPicker(
+                                urgent: _urgent,
+                                onChanged: (value) =>
+                                    setState(() => _urgent = value),
+                              ),
+                              const SizedBox(height: 20),
+                              RequestDurationPicker(
+                                selectedMinutes: _durationMinutes,
+                                onChanged: (value) => setState(() {
+                                  _durationMinutes = value;
+                                  _scheduleError = null;
+                                  _timeSuggestions = const [];
+                                }),
+                                label: 'How long will you need the volunteer?',
+                              ),
+                              const SizedBox(height: 28),
+                              _volunteerCard(theme),
+                              const SizedBox(height: 16),
+                              FilledButton.icon(
+                                onPressed: _submitting
+                                    ? null
+                                    : _submitVolunteerRequest,
+                                style: FilledButton.styleFrom(
+                                  backgroundColor: _accent,
+                                  padding: const EdgeInsets.symmetric(
+                                    vertical: 14,
+                                  ),
+                                ),
+                                icon: const Icon(
+                                  Icons.volunteer_activism_rounded,
+                                ),
+                                label: Text(
+                                  _submitting
+                                      ? 'Sending…'
+                                      : _needsNow
+                                          ? 'Request volunteer ride'
+                                          : 'Schedule volunteer ride',
+                                ),
+                              ),
+                            ],
+                          ],
+                        );
+                      },
                     ),
-                    const SizedBox(height: 20),
-                    RequestDurationPicker(
-                      selectedMinutes: _durationMinutes,
-                      onChanged: (value) => setState(() {
-                        _durationMinutes = value;
-                        _scheduleError = null;
-                        _timeSuggestions = const [];
-                      }),
-                      label: 'How long will you need the volunteer?',
-                    ),
-                    const SizedBox(height: 28),
-                    if (_isCovered) ...[
-                      _volunteerCard(theme),
-                      const SizedBox(height: 16),
-                      FilledButton.icon(
-                        onPressed: _submitting ? null : _submitVolunteerRequest,
-                        style: FilledButton.styleFrom(
-                          backgroundColor: _accent,
-                          padding: const EdgeInsets.symmetric(vertical: 14),
-                        ),
-                        icon: const Icon(Icons.volunteer_activism_rounded),
-                        label: Text(
-                          _submitting
-                              ? 'Sending…'
-                              : _needsNow
-                                  ? 'Request volunteer ride'
-                                  : 'Schedule volunteer ride',
-                        ),
-                      ),
-                    ] else ...[
-                      if (_needsNow) ...[
-                        Text(
-                          'Need a ride right now?',
-                          style: theme.textTheme.titleSmall?.copyWith(
-                            fontWeight: FontWeight.w700,
-                          ),
-                        ),
-                        const SizedBox(height: 12),
-                        _rideshareButtons(),
-                        const SizedBox(height: 28),
-                      ],
-                      Text(
-                        _needsNow
-                            ? 'Want our team to follow up?'
-                            : 'Save for team follow-up',
-                        style: theme.textTheme.titleSmall?.copyWith(
-                          fontWeight: FontWeight.w700,
-                        ),
-                      ),
-                      const SizedBox(height: 8),
-                      Text(
-                        _needsNow
-                            ? 'We can reach out about ride options in your area. '
-                                'No address needed — we will contact you.'
-                            : 'We will review your request and contact you about options in your area.',
-                        style: theme.textTheme.bodyMedium?.copyWith(
-                          color: Colors.black54,
-                          height: 1.4,
-                        ),
-                      ),
-                      const SizedBox(height: 14),
-                      OutlinedButton.icon(
-                        onPressed: _submitting ? null : _submitFollowUpRequest,
-                        style: OutlinedButton.styleFrom(
-                          padding: const EdgeInsets.symmetric(vertical: 14),
-                        ),
-                        icon: const Icon(Icons.support_agent_rounded),
-                        label: Text(
-                          _submitting
-                              ? 'Saving…'
-                              : 'Save request for follow-up',
-                        ),
-                      ),
-                    ],
                   ],
                 ],
               ),

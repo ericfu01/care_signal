@@ -14,6 +14,12 @@ service firebase.storage {
           && firestore.get(/databases/(default)/documents/users/$(request.auth.uid)).data.familyId.size() > 0;
     }
 
+    function isStaffAccount() {
+      return signedIn()
+          && firestore.get(/databases/(default)/documents/users/$(request.auth.uid)).data.accountType
+              == 'staff';
+    }
+
     // Files are stored as profile_photos/{uid}.jpg (single path segment).
     match /profile_photos/{fileName} {
       function photoUid() {
@@ -28,6 +34,18 @@ service firebase.storage {
       allow write: if isOwnPhoto()
           && request.resource.size < 5 * 1024 * 1024;
       allow delete: if isOwnPhoto();
+    }
+
+    // Feedback evidence: feedback_attachments/{uid}/{feedbackId}/{file}.jpg
+    match /feedback_attachments/{userId}/{feedbackId}/{fileName} {
+      allow read: if signedIn()
+          && (request.auth.uid == userId || isStaffAccount());
+      allow write: if signedIn()
+          && request.auth.uid == userId
+          && request.resource.size < 5 * 1024 * 1024
+          && request.resource.contentType.matches('image/.*');
+      allow delete: if signedIn()
+          && (request.auth.uid == userId || isStaffAccount());
     }
   }
 }

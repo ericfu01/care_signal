@@ -1,3 +1,5 @@
+import 'package:flutter/foundation.dart';
+
 import 'family_check_in_loader.dart';
 import 'family_models.dart';
 import 'check_in_openai_insights.dart';
@@ -70,8 +72,10 @@ class InsightsAiService {
     bool forceRefresh = false,
   }) async {
     if (!isOpenAiConfigured) {
-      return const InsightsAiResult(
-        errorMessage: 'Add OPENAI_API_KEY in assets/openai.local.env for AI insights.',
+      return InsightsAiResult(
+        errorMessage: kDebugMode
+            ? 'Add OPENAI_API_KEY in assets/openai.local.env for AI insights.'
+            : 'AI insights are unavailable right now.',
       );
     }
     if (!context.hasCheckInData) {

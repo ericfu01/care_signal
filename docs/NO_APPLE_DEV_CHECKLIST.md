@@ -95,10 +95,11 @@ Set support email without an app update:
 
 1. Firestore → `config/app`
 2. Fields:
-   - `supportEmail` — shown on Help page
+   - `supportEmail` — shown on Help page (omit to hide email and point users to in-app feedback)
    - `inviteHelpUrl` — optional link in invite emails
 
 See [`docs/EMAIL_SETUP.md`](EMAIL_SETUP.md) for SendGrid setup (peer group + staff invite emails).
+Never put API keys in `config/app` — only `config/email` (Admin SDK / Cloud Functions).
 
 ---
 
