@@ -5,7 +5,6 @@ import 'event_signup_page.dart';
 import 'scheduled_event.dart';
 import 'support_action_pages.dart';
 import 'support_available_page.dart';
-import 'support_catalog.dart';
 import 'support_recommendations.dart';
 import 'support_repository.dart';
 
@@ -33,7 +32,6 @@ class _SupportPageState extends State<SupportPage> {
   Future<void> _load() async {
     if (mounted) setState(() => _loading = true);
 
-    final catalogEvent = SupportCatalog.nextEvent;
     try {
       final plan =
           await SupportRepository.instance.loadPersonalizedSupportPlan();
@@ -45,27 +43,12 @@ class _SupportPageState extends State<SupportPage> {
       var signedUp = false;
       String? eventReason = plan.eventReason;
 
+      // Only staff-published Firestore events — no fake catalog workshop.
       if (communityEvent != null) {
         signedUp =
             await SupportRepository.instance.hasEventSignup(communityEvent.id);
         scheduled = communityEvent.toScheduledEvent();
         eventReason ??= 'Upcoming community event';
-      } else {
-        final catalog = plan.featuredEvent ?? catalogEvent;
-        if (catalog != null) {
-          signedUp = await SupportRepository.instance.hasEventSignup(catalog.id);
-          var signupCount = catalog.baseFamiliesSignedUp;
-          if (signedUp) signupCount += 1;
-          scheduled = ScheduledEvent(
-            id: catalog.id,
-            monthAbbrev: catalog.monthAbbrev,
-            day: catalog.day,
-            title: catalog.title,
-            isOnline: catalog.isOnline,
-            timeDisplay: catalog.timeDisplay,
-            familiesSignedUp: signupCount,
-          );
-        }
       }
 
       if (!mounted) return;
@@ -77,20 +60,7 @@ class _SupportPageState extends State<SupportPage> {
         _scheduledEvent = scheduled;
       });
     } catch (_) {
-      if (!mounted) return;
-      setState(() {
-        if (catalogEvent != null) {
-          _scheduledEvent = ScheduledEvent(
-            id: catalogEvent.id,
-            monthAbbrev: catalogEvent.monthAbbrev,
-            day: catalogEvent.day,
-            title: catalogEvent.title,
-            isOnline: catalogEvent.isOnline,
-            timeDisplay: catalogEvent.timeDisplay,
-            familiesSignedUp: catalogEvent.baseFamiliesSignedUp,
-          );
-        }
-      });
+      // Keep prior UI state on failure; do not show a fake catalog event.
     } finally {
       if (mounted) setState(() => _loading = false);
     }

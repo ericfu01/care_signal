@@ -2,6 +2,7 @@ import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
 
+import 'check_in_history_page.dart';
 import 'family_member_presence_avatar.dart';
 import 'legal_pages.dart';
 import 'profile_account_pages.dart';
@@ -428,6 +429,20 @@ class ProfilePage extends StatelessWidget {
               ),
               child: Column(
                 children: [
+                  _ProfileActionRow(
+                    icon: Icons.history_rounded,
+                    iconColor: const Color(0xFF00695C),
+                    iconBoxColor: const Color(0xFFE0F2F1),
+                    label: 'Check-in history',
+                    onTap: () {
+                      Navigator.of(context).push(
+                        MaterialPageRoute<void>(
+                          builder: (context) => const CheckInHistoryPage(),
+                        ),
+                      );
+                    },
+                  ),
+                  Divider(height: 1, thickness: 1, color: Colors.grey.shade200),
                   _ProfileActionRow(
                     icon: Icons.download_rounded,
                     iconColor: const Color(0xFF00695C),

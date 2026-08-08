@@ -57,8 +57,8 @@ class PersonalizedSupportPlan {
           reason: 'Available once we learn your wellness patterns',
         ),
       ],
-      featuredEvent: SupportCatalog.nextEvent,
-      eventReason: 'Open to all families',
+      featuredEvent: null,
+      eventReason: null,
       hasCheckInData: false,
     );
   }
@@ -82,8 +82,6 @@ class SupportRecommendations {
     final stress = insights.stressSourceCounts;
     final topStress = _topStressKeys(stress);
     final lowestScore = _lowestScore(insights.memberScores);
-    final activeCount =
-        insights.memberScores.values.where((s) => s != null).length;
     final needsRest = lowestScore != null && lowestScore < 60;
     final needsUrgentSupport = lowestScore != null && lowestScore < 40;
 
@@ -207,21 +205,6 @@ class SupportRecommendations {
       );
     }
 
-    final event = SupportCatalog.nextEvent;
-    String? eventReason;
-    if (event != null) {
-      if (activeCount <= 2) {
-        eventReason =
-            'Your family is building check-in habits — this workshop fits where you are now';
-      } else if (needsRest) {
-        eventReason =
-            'Wellness has dipped lately — the workshop covers family recovery strategies';
-      } else {
-        eventReason =
-            'Recommended based on your family\'s recent check-in patterns';
-      }
-    }
-
     final headline = needsUrgentSupport
         ? 'Extra support recommended — review rest options and crisis lines'
         : needsRest
@@ -237,8 +220,8 @@ class SupportRecommendations {
       peerGroups: peerGroups.take(2).toList(),
       peerGroupReasons: peerGroupReasons,
       volunteerServices: volunteerServices.take(2).toList(),
-      featuredEvent: event,
-      eventReason: eventReason,
+      featuredEvent: null,
+      eventReason: null,
       highlightCrisisLine: needsUrgentSupport,
       hasCheckInData: true,
     );

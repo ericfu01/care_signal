@@ -1,7 +1,8 @@
 import 'package:flutter/material.dart';
 
-import 'music_therapy_search_section.dart';
+import 'family_insights_copy.dart';
 import 'family_models.dart';
+import 'music_therapy_search_section.dart';
 import 'spotify_launcher.dart';
 import 'spotify_links.dart';
 import 'support_catalog.dart';
@@ -945,8 +946,64 @@ class _VolunteerProfileCard extends StatelessWidget {
   }
 }
 
-class MusicPage extends StatelessWidget {
+class MusicPage extends StatefulWidget {
   const MusicPage({super.key});
+
+  @override
+  State<MusicPage> createState() => _MusicPageState();
+}
+
+class _MusicPageState extends State<MusicPage> {
+  String _personalizedBlurb =
+      'Complete a daily check-in to personalize music suggestions.';
+  bool _loadingPersonalization = true;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadPersonalization();
+  }
+
+  Future<void> _loadPersonalization() async {
+    try {
+      final insights = await SupportRepository.instance.loadInsightsCopy();
+      if (!mounted) return;
+      setState(() {
+        _personalizedBlurb = _musicPersonalizationBlurb(insights);
+        _loadingPersonalization = false;
+      });
+    } catch (_) {
+      if (!mounted) return;
+      setState(() {
+        _personalizedBlurb =
+            'Complete a daily check-in to personalize music suggestions.';
+        _loadingPersonalization = false;
+      });
+    }
+  }
+
+  /// Uses logged stress sources only — never invents weekdays.
+  static String _musicPersonalizationBlurb(FamilyInsightsCopy? insights) {
+    if (insights == null || !insights.hasCheckInData) {
+      return 'Complete a daily check-in to personalize music suggestions.';
+    }
+
+    final top = insights.stressSourceCounts.entries
+        .where((e) => e.value > 0)
+        .toList()
+      ..sort((a, b) => b.value.compareTo(a.value));
+
+    if (top.isEmpty) {
+      return 'Based on your check-ins, try calming music when you need a reset.';
+    }
+    if (top.length == 1) {
+      return 'Based on your stress patterns, calming music may help most when '
+          '${top.first.key.toLowerCase()} stress is high.';
+    }
+    return 'Based on your stress patterns, calming music may help most when '
+        '${top.first.key.toLowerCase()} or ${top[1].key.toLowerCase()} '
+        'stress is high.';
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -1174,16 +1231,28 @@ class MusicPage extends StatelessWidget {
                                 ),
                           ),
                           const SizedBox(height: 10),
-                          Text(
-                            'Based on your stress patterns, calming music helps most on ____',
-                            style: Theme.of(context)
-                                .textTheme
-                                .bodyMedium
-                                ?.copyWith(
-                                  color: Colors.black54,
-                                  height: 1.45,
-                                ),
-                          ),
+                          if (_loadingPersonalization)
+                            Text(
+                              'Loading your check-in patterns…',
+                              style: Theme.of(context)
+                                  .textTheme
+                                  .bodyMedium
+                                  ?.copyWith(
+                                    color: Colors.black54,
+                                    height: 1.45,
+                                  ),
+                            )
+                          else
+                            Text(
+                              _personalizedBlurb,
+                              style: Theme.of(context)
+                                  .textTheme
+                                  .bodyMedium
+                                  ?.copyWith(
+                                    color: Colors.black54,
+                                    height: 1.45,
+                                  ),
+                            ),
                         ],
                       ),
                     ),

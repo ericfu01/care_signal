@@ -1,6 +1,7 @@
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 
+import 'check_in_history_page.dart';
 import 'family_check_in_loader.dart';
 import 'family_models.dart';
 import 'insights_ai_service.dart';
@@ -421,7 +422,22 @@ class _TrendsPageState extends State<TrendsPage> {
               ),
             ],
           ),
-          const SizedBox(height: 16),
+          const SizedBox(height: 12),
+          Align(
+            alignment: Alignment.centerLeft,
+            child: TextButton.icon(
+              onPressed: () {
+                Navigator.of(context).push<void>(
+                  MaterialPageRoute<void>(
+                    builder: (context) => const CheckInHistoryPage(),
+                  ),
+                );
+              },
+              icon: const Icon(Icons.history_rounded, size: 20),
+              label: const Text('Your check-in history'),
+            ),
+          ),
+          const SizedBox(height: 8),
           Container(
             width: double.infinity,
             padding: const EdgeInsets.all(16),

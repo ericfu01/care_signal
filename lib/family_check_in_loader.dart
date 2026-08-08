@@ -15,6 +15,29 @@ class DailyWellnessPoint {
   bool get hasData => averageScore != null;
 }
 
+/// A single saved daily check-in for history views.
+class CheckInHistoryEntry {
+  const CheckInHistoryEntry({
+    required this.id,
+    required this.day,
+    required this.score,
+    this.mood,
+    this.energy,
+    this.stress,
+    this.stressSources = const [],
+    this.createdAt,
+  });
+
+  final String id;
+  final DateTime day;
+  final int score;
+  final int? mood;
+  final int? energy;
+  final int? stress;
+  final List<String> stressSources;
+  final DateTime? createdAt;
+}
+
 /// Latest wellness score per family member (from each user's check-ins).
 class FamilyCheckInLoader {
   FamilyCheckInLoader._();
@@ -75,6 +98,79 @@ class FamilyCheckInLoader {
         return const [];
       }
     }
+  }
+
+  /// Current user's check-ins, newest first (up to [limit]).
+  static Future<List<CheckInHistoryEntry>> loadHistoryForUid(
+    String uid, {
+    int limit = 180,
+  }) async {
+    if (uid.isEmpty || limit <= 0) return const [];
+
+    List<QueryDocumentSnapshot<Map<String, dynamic>>> docs;
+    try {
+      final snap = await FirebaseFirestore.instance
+          .collection('users')
+          .doc(uid)
+          .collection('daily_check_ins')
+          .orderBy('createdAt', descending: true)
+          .limit(limit)
+          .get();
+      docs = snap.docs;
+    } catch (_) {
+      try {
+        final snap = await FirebaseFirestore.instance
+            .collection('users')
+            .doc(uid)
+            .collection('daily_check_ins')
+            .limit(limit)
+            .get();
+        docs = snap.docs.toList()
+          ..sort((a, b) {
+            final da = _readCheckInDay(a.data()) ??
+                DateTime.fromMillisecondsSinceEpoch(0);
+            final db = _readCheckInDay(b.data()) ??
+                DateTime.fromMillisecondsSinceEpoch(0);
+            return db.compareTo(da);
+          });
+      } catch (_) {
+        return const [];
+      }
+    }
+
+    final entries = <CheckInHistoryEntry>[];
+    for (final doc in docs) {
+      final data = doc.data();
+      final day = _readCheckInDay(data);
+      final score = _readScore(data);
+      if (day == null || score == null) continue;
+
+      final sources = (data['stressSources'] as List<dynamic>?)
+              ?.map((e) => e.toString())
+              .where((e) => e.isNotEmpty)
+              .toList() ??
+          const <String>[];
+
+      DateTime? createdAt;
+      final createdRaw = data['createdAt'];
+      if (createdRaw is Timestamp) {
+        createdAt = createdRaw.toDate().toLocal();
+      }
+
+      entries.add(
+        CheckInHistoryEntry(
+          id: doc.id,
+          day: day,
+          score: score,
+          mood: (data['mood'] as num?)?.round(),
+          energy: (data['energy'] as num?)?.round(),
+          stress: (data['stress'] as num?)?.round(),
+          stressSources: sources,
+          createdAt: createdAt,
+        ),
+      );
+    }
+    return entries;
   }
 
   /// Average wellness per calendar day for all [members] over the last [dayCount] days.

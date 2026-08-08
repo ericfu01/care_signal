@@ -198,35 +198,6 @@ class SupportCatalog {
         ),
       ];
 
-  /// Next upcoming community event from the catalog.
-  static CatalogSupportEvent? get nextEvent {
-    final now = DateTime.now();
-    final candidates = [
-      CatalogSupportEvent(
-        id: 'family-wellness-workshop',
-        startsAt: _nextWeekday(now, DateTime.wednesday, hour: 18, minute: 30),
-        title: 'Family wellness workshop',
-        isOnline: true,
-        timeDisplay: 'Wed · 6:30 p.m.',
-        baseFamiliesSignedUp: 8,
-      ),
-    ];
-    for (final event in candidates) {
-      if (event.startsAt.isAfter(now)) return event;
-    }
-    return candidates.isEmpty ? null : candidates.first;
-  }
-
-  static DateTime _nextWeekday(
-    DateTime from,
-    int weekday, {
-    required int hour,
-    required int minute,
-  }) {
-    var date = DateTime(from.year, from.month, from.day, hour, minute);
-    while (date.weekday != weekday || !date.isAfter(from)) {
-      date = date.add(const Duration(days: 1));
-    }
-    return date;
-  }
+  /// Catalog demo events removed — use staff-published `community_events` only.
+  static CatalogSupportEvent? get nextEvent => null;
 }
