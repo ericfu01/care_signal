@@ -651,7 +651,7 @@ class _WeeklySummaryCard extends StatelessWidget {
                 const SizedBox(height: 12),
                 Text(
                   kDebugMode
-                      ? 'Add OPENAI_API_KEY in assets/openai.local.env for an AI-written summary.'
+                      ? 'Sign in (Cloud Function) or add OPENAI_API_KEY in assets/openai.local.env for an AI-written summary.'
                       : 'AI summary is unavailable right now. Your check-in trends below still work.',
                   style: Theme.of(context).textTheme.bodySmall?.copyWith(
                         color: Colors.white.withValues(alpha: 0.85),

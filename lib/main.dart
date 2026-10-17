@@ -20,7 +20,8 @@ Future<void> main() async {
   if (kDebugMode) {
     debugPrint(
       '[CareSignal][OpenAI] '
-      '${isOpenAiConfigured ? 'API key configured' : 'API key missing (stub chat)'}',
+      '${hasLocalOpenAiKey ? 'local API key present' : 'no local API key'} '
+      '(Cloud Function used when signed in)',
     );
     debugPrint(
       '[CareSignal][Spotify] '

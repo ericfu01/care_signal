@@ -1555,6 +1555,95 @@ async function deleteUserSubcollections(db, uid) {
 }
 
 /**
+ * Proxy OpenAI Chat Completions so the API key stays in Firebase secrets.
+ * Client sends { messages: [{role, content}, ...], model?: string }.
+ */
+exports.openAiChatCompletion = onCall(
+  {
+    region: 'us-central1',
+    secrets: ['OPENAI_API_KEY'],
+    timeoutSeconds: 60,
+  },
+  async (request) => {
+    if (!request.auth) {
+      throw new HttpsError('unauthenticated', 'Sign in to use AI features.');
+    }
+
+    const messages = request.data?.messages;
+    if (!Array.isArray(messages) || messages.length === 0) {
+      throw new HttpsError('invalid-argument', 'messages array is required.');
+    }
+
+    const cleaned = [];
+    for (const item of messages) {
+      if (!item || typeof item !== 'object') continue;
+      const role = typeof item.role === 'string' ? item.role : '';
+      const content = typeof item.content === 'string' ? item.content.trim() : '';
+      if (!content) continue;
+      if (role !== 'system' && role !== 'user' && role !== 'assistant') continue;
+      cleaned.push({ role, content });
+      if (cleaned.length >= 40) break;
+    }
+    if (cleaned.length === 0) {
+      throw new HttpsError('invalid-argument', 'No valid messages provided.');
+    }
+
+    const model =
+      typeof request.data?.model === 'string' && request.data.model.trim()
+        ? request.data.model.trim().slice(0, 64)
+        : 'gpt-4o-mini';
+
+    const apiKey = process.env.OPENAI_API_KEY;
+    if (!apiKey) {
+      console.error('[openAiChatCompletion] OPENAI_API_KEY secret missing');
+      throw new HttpsError('failed-precondition', 'OpenAI is not configured on the server.');
+    }
+
+    let response;
+    try {
+      response = await fetch('https://api.openai.com/v1/chat/completions', {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${apiKey}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          model,
+          messages: cleaned,
+          temperature: 0.65,
+          max_tokens: 700,
+        }),
+      });
+    } catch (err) {
+      console.error('[openAiChatCompletion] fetch failed:', err);
+      throw new HttpsError('unavailable', 'Could not reach OpenAI.');
+    }
+
+    const bodyText = await response.text();
+    if (!response.ok) {
+      console.error(
+        `[openAiChatCompletion] OpenAI HTTP ${response.status}: ${bodyText.slice(0, 500)}`,
+      );
+      throw new HttpsError('internal', `OpenAI request failed (${response.status}).`);
+    }
+
+    let decoded;
+    try {
+      decoded = JSON.parse(bodyText);
+    } catch (err) {
+      throw new HttpsError('internal', 'OpenAI returned invalid JSON.');
+    }
+
+    const content = decoded?.choices?.[0]?.message?.content;
+    if (typeof content !== 'string' || !content.trim()) {
+      throw new HttpsError('internal', 'OpenAI returned empty content.');
+    }
+
+    return { content: content.trim() };
+  },
+);
+
+/**
  * Delete the signed-in user's auth account and remove personal data.
  */
 exports.deleteUserAccount = onCall({ region: 'us-central1' }, async (request) => {

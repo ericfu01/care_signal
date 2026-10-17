@@ -50,12 +50,26 @@ class InsightsAiService {
     required List<UserProfile> familyProfiles,
     int? familyWellnessAverage,
   }) async {
-    final recent = familyProfiles.isEmpty
-        ? <String, List<int>>{}
-        : await FamilyCheckInLoader.recentScoresByMemberName(
-            familyProfiles,
-            limit: 7,
-          );
+    if (familyProfiles.isEmpty) {
+      return FamilyInsightsAiContext(
+        currentUserName: currentUserName.trim().isNotEmpty
+            ? currentUserName.trim()
+            : 'You',
+        memberScores: memberScores,
+        stressSourceCounts: stressSourceCounts,
+        familyWellnessAverage: familyWellnessAverage,
+      );
+    }
+
+    final recentFuture = FamilyCheckInLoader.recentScoresByMemberName(
+      familyProfiles,
+      limit: 7,
+    );
+    final latestStressFuture =
+        FamilyCheckInLoader.latestStressSourcesByMemberName(familyProfiles);
+    final recent = await recentFuture;
+    final latestStress = await latestStressFuture;
+
     return FamilyInsightsAiContext(
       currentUserName: currentUserName.trim().isNotEmpty
           ? currentUserName.trim()
@@ -64,6 +78,7 @@ class InsightsAiService {
       stressSourceCounts: stressSourceCounts,
       familyWellnessAverage: familyWellnessAverage,
       recentScoresByMember: recent,
+      latestStressSourcesByMember: latestStress,
     );
   }
 
@@ -74,7 +89,8 @@ class InsightsAiService {
     if (!isOpenAiConfigured) {
       return InsightsAiResult(
         errorMessage: kDebugMode
-            ? 'Add OPENAI_API_KEY in assets/openai.local.env for AI insights.'
+            ? 'AI insights need a signed-in account (Cloud Function) or '
+                'OPENAI_API_KEY in assets/openai.local.env.'
             : 'AI insights are unavailable right now.',
       );
     }

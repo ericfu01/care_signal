@@ -1,3 +1,4 @@
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
@@ -60,14 +61,14 @@ Future<void> initOpenAiEnv() async {
   }
 }
 
-/// Resolves the API key. Priority:
+/// Resolves an optional **local** API key (dev / fallback only). Priority:
 /// 1. `--dart-define=OPENAI_API_KEY=...` / `--dart-define-from-file=.env` at build time
 /// 2. `assets/openai.local.env` (works on iOS/Android when bundled)
 /// 3. Root `.env` (`OPENAI_API_KEY`) when [loadRootOpenAiEnv] runs (desktop `flutter run`)
 /// 4. `assets/env.defaults` via flutter_dotenv
 ///
-/// **Security:** any key shipped inside the app bundle can be extracted from release
-/// binaries. Prefer a backend or Cloud Function for production OpenAI calls.
+/// Production preference: signed-in users call the `openAiChatCompletion` Cloud
+/// Function so the key stays in Firebase secrets, not the app binary.
 String? get openAiApiKeyOrNull {
   const fromDefine = String.fromEnvironment('OPENAI_API_KEY');
   if (fromDefine.isNotEmpty) return fromDefine.trim();
@@ -88,5 +89,15 @@ String? get openAiApiKeyOrNull {
   return null;
 }
 
-bool get isOpenAiConfigured =>
+bool get hasLocalOpenAiKey =>
     openAiApiKeyOrNull != null && openAiApiKeyOrNull!.isNotEmpty;
+
+/// True when AI can be attempted: Cloud Function (signed in) and/or local key.
+bool get isOpenAiConfigured {
+  if (hasLocalOpenAiKey) return true;
+  try {
+    return FirebaseAuth.instance.currentUser != null;
+  } catch (_) {
+    return false;
+  }
+}

@@ -4,6 +4,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 
+import 'family_check_in_loader.dart';
 import 'openai_config.dart';
 import 'support_chat_assistant.dart';
 import 'support_chat_list_page.dart';
@@ -110,16 +111,22 @@ class _SupportChatThreadPageState extends State<_SupportChatThreadPage> {
   Future<List<Map<String, String>>> _openAiMessagesFromFirestore(
     String uid,
     String latestUserText,
-    String latestDocId,
-  ) async {
+    String latestDocId, {
+    CheckInHistoryEntry? latestCheckIn,
+  }) async {
     final trimmed = latestUserText.trim();
+    final checkIn =
+        latestCheckIn ?? await FamilyCheckInLoader.latestCheckInForUid(uid);
     final snap = await _messagesRef(uid)
         .orderBy('createdAt', descending: false)
         .limit(50)
         .get();
 
     final out = <Map<String, String>>[
-      {'role': 'system', 'content': OpenAiSupportChatAssistant.systemPrompt},
+      {
+        'role': 'system',
+        'content': OpenAiSupportChatAssistant.systemPromptWithCheckIn(checkIn),
+      },
     ];
 
     var sawLatest = false;
@@ -212,9 +219,16 @@ class _SupportChatThreadPageState extends State<_SupportChatThreadPage> {
         widget.conversationId,
       );
 
+      CheckInHistoryEntry? latestCheckIn;
       List<Map<String, String>>? openAiHistory;
       if (_assistantUsesOpenAi) {
-        openAiHistory = await _openAiMessagesFromFirestore(uid, text, docRef.id);
+        latestCheckIn = await FamilyCheckInLoader.latestCheckInForUid(uid);
+        openAiHistory = await _openAiMessagesFromFirestore(
+          uid,
+          text,
+          docRef.id,
+          latestCheckIn: latestCheckIn,
+        );
       }
 
       String replyText;
@@ -223,6 +237,7 @@ class _SupportChatThreadPageState extends State<_SupportChatThreadPage> {
         replyText = await _assistant.replyToUserMessage(
           text,
           openAiHistory: openAiHistory,
+          latestCheckIn: latestCheckIn,
         );
       } catch (e, st) {
         debugPrint('[CareSignal][SupportChat] assistant failed: $e\n$st');
@@ -231,6 +246,7 @@ class _SupportChatThreadPageState extends State<_SupportChatThreadPage> {
             replyText = await _assistant.replyToUserMessage(
               text,
               openAiHistory: null,
+              latestCheckIn: latestCheckIn,
             );
           } catch (e2) {
             replyText =

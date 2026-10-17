@@ -278,6 +278,28 @@ class FamilyCheckInLoader {
     return history;
   }
 
+  /// Stress sources from each member's most recent check-in.
+  static Future<Map<String, List<String>>> latestStressSourcesByMemberName(
+    List<UserProfile> members,
+  ) async {
+    final out = <String, List<String>>{};
+    await Future.wait(
+      members.map((member) async {
+        final latest = await latestCheckInForUid(member.uid);
+        out[member.displayName] = latest?.stressSources ?? const <String>[];
+      }),
+    );
+    return out;
+  }
+
+  /// Most recent check-in for [uid], or null if none.
+  static Future<CheckInHistoryEntry?> latestCheckInForUid(String uid) async {
+    if (uid.isEmpty) return null;
+    final history = await loadHistoryForUid(uid, limit: 1);
+    if (history.isEmpty) return null;
+    return history.first;
+  }
+
   static Future<List<Map<String, dynamic>>> _rawDocsForLatestScores(
     String uid,
   ) async =>

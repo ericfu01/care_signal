@@ -1,11 +1,17 @@
 import 'dart:async';
 import 'dart:convert';
 
+import 'package:cloud_functions/cloud_functions.dart';
+import 'package:firebase_auth/firebase_auth.dart';
+import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
 
 import 'openai_config.dart';
 
 /// Minimal OpenAI Chat Completions client for Care Signal features.
+///
+/// Prefers the `openAiChatCompletion` Cloud Function (API key stays server-side),
+/// then falls back to a local `OPENAI_API_KEY` when present.
 class OpenAiClient {
   OpenAiClient._();
 
@@ -69,16 +75,64 @@ class OpenAiClient {
     required List<Map<String, String>> messages,
     String model = defaultModel,
   }) async {
-    final key = openAiApiKeyOrNull;
-    if (key == null || key.isEmpty) {
-      throw StateError('OPENAI_API_KEY is not configured');
+    final cleaned = sanitizeChatMessages(messages);
+
+    Object? cloudError;
+    if (FirebaseAuth.instance.currentUser != null) {
+      try {
+        return await _viaCloudFunction(cleaned, model: model);
+      } catch (e, st) {
+        cloudError = e;
+        debugPrint('[CareSignal][OpenAI] Cloud Function failed: $e\n$st');
+      }
     }
 
+    final key = openAiApiKeyOrNull;
+    if (key != null && key.isNotEmpty) {
+      return _viaDirectHttp(cleaned, apiKey: key, model: model);
+    }
+
+    if (cloudError != null) {
+      throw StateError(
+        'OpenAI Cloud Function failed and no local API key is configured: $cloudError',
+      );
+    }
+    throw StateError(
+      'OpenAI is not available (sign in for Cloud Function, or set OPENAI_API_KEY)',
+    );
+  }
+
+  static Future<String> _viaCloudFunction(
+    List<Map<String, String>> messages, {
+    required String model,
+  }) async {
+    final callable = FirebaseFunctions.instanceFor(region: 'us-central1')
+        .httpsCallable(
+      'openAiChatCompletion',
+      options: HttpsCallableOptions(timeout: const Duration(seconds: 60)),
+    );
+    final result = await callable.call<Map<String, dynamic>>({
+      'messages': messages,
+      'model': model,
+    });
+    final data = result.data;
+    final content = (data['content'] as String?)?.trim();
+    if (content == null || content.isEmpty) {
+      throw StateError('Cloud Function returned empty OpenAI content');
+    }
+    return content;
+  }
+
+  static Future<String> _viaDirectHttp(
+    List<Map<String, String>> messages, {
+    required String apiKey,
+    required String model,
+  }) async {
     final response = await http
         .post(
           Uri.parse(_endpoint),
           headers: {
-            'Authorization': 'Bearer $key',
+            'Authorization': 'Bearer $apiKey',
             'Content-Type': 'application/json',
           },
           body: jsonEncode({
