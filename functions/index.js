@@ -1382,14 +1382,33 @@ async function deleteSupportConversations(db, uid) {
   }
 }
 
-async function cleanupPeerGroupsForUser(db, uid) {
-  const memberSnap = await db
-    .collectionGroup('members')
-    .where('memberUid', '==', uid)
-    .get();
-  for (const doc of memberSnap.docs) {
-    await doc.ref.delete();
+async function removePeerGroupMembershipDocs(db, uid) {
+  // Prefer collection-group query when the single-field index exists.
+  try {
+    const memberSnap = await db
+      .collectionGroup('members')
+      .where('memberUid', '==', uid)
+      .get();
+    for (const doc of memberSnap.docs) {
+      await doc.ref.delete();
+    }
+    return;
+  } catch (err) {
+    console.warn(
+      `[cleanupPeerGroupsForUser] members collectionGroup query failed for ${uid}:`,
+      err?.message || err,
+    );
   }
+
+  // Fallback: membership docs are keyed by uid (`members/{uid}`).
+  const groups = await db.collection('peer_groups').get();
+  for (const group of groups.docs) {
+    await group.ref.collection('members').doc(uid).delete().catch(() => {});
+  }
+}
+
+async function cleanupPeerGroupsForUser(db, uid) {
+  await removePeerGroupMembershipDocs(db, uid);
 
   const cohostGroups = await db
     .collection('peer_groups')
@@ -1516,10 +1535,19 @@ async function anonymizeFamilyChats(db, uid, familyId) {
 async function anonymizeVolunteerRequestReferences(db, uid) {
   const uidFields = ['volunteerUid', 'counterVolunteerUid'];
   for (const field of uidFields) {
-    const snap = await db
-      .collectionGroup('volunteer_requests')
-      .where(field, '==', uid)
-      .get();
+    let snap;
+    try {
+      snap = await db
+        .collectionGroup('volunteer_requests')
+        .where(field, '==', uid)
+        .get();
+    } catch (err) {
+      console.warn(
+        `[anonymizeVolunteerRequestReferences] ${field} query failed for ${uid}:`,
+        err?.message || err,
+      );
+      continue;
+    }
     for (const doc of snap.docs) {
       const updates = {
         [field]: FieldValue.delete(),
@@ -1646,47 +1674,62 @@ exports.openAiChatCompletion = onCall(
 /**
  * Delete the signed-in user's auth account and remove personal data.
  */
-exports.deleteUserAccount = onCall({ region: 'us-central1' }, async (request) => {
-  if (!request.auth) {
-    throw new HttpsError('unauthenticated', 'Sign in to delete your account.');
-  }
+exports.deleteUserAccount = onCall(
+  { region: 'us-central1', timeoutSeconds: 120 },
+  async (request) => {
+    if (!request.auth) {
+      throw new HttpsError('unauthenticated', 'Sign in to delete your account.');
+    }
 
-  const uid = request.auth.uid;
-  const db = getFirestore();
-  const userRef = db.collection('users').doc(uid);
-  const userSnap = await userRef.get();
-  const userData = userSnap.data() || {};
-  const familyId = userData.familyId;
+    const uid = request.auth.uid;
+    const db = getFirestore();
+    const userRef = db.collection('users').doc(uid);
 
-  await cleanupPeerGroupsForUser(db, uid);
-  await anonymizeFamilyChats(db, uid, familyId);
-  await anonymizeVolunteerRequestReferences(db, uid);
-  await deleteVolunteerMessageThreads(db, uid);
-  await deleteUserSubcollections(db, uid);
-  await db.collection('partner_shares').doc(uid).delete();
+    try {
+      const userSnap = await userRef.get();
+      const userData = userSnap.data() || {};
+      const familyId = userData.familyId;
 
-  try {
-    const bucket = getStorage().bucket();
-    await bucket.file(`profile_photos/${uid}.jpg`).delete({ ignoreNotFound: true });
-  } catch (err) {
-    console.warn(`[deleteUserAccount] profile photo delete failed for ${uid}:`, err);
-  }
+      await cleanupPeerGroupsForUser(db, uid);
+      await anonymizeFamilyChats(db, uid, familyId);
+      await anonymizeVolunteerRequestReferences(db, uid);
+      await deleteVolunteerMessageThreads(db, uid);
+      await deleteUserSubcollections(db, uid);
+      await db.collection('partner_shares').doc(uid).delete().catch(() => {});
 
-  await userRef.set(
-    {
-      displayName: 'Deleted user',
-      accountStatus: 'deleted',
-      email: FieldValue.delete(),
-      familyId: FieldValue.delete(),
-      profilePhotoUrl: FieldValue.delete(),
-      partnerWellnessSnapshot: FieldValue.delete(),
-      volunteerCatalogId: FieldValue.delete(),
-      volunteerOnline: false,
-      updatedAt: FieldValue.serverTimestamp(),
-    },
-    { merge: true },
-  );
+      try {
+        const bucket = getStorage().bucket();
+        await bucket.file(`profile_photos/${uid}.jpg`).delete({ ignoreNotFound: true });
+      } catch (err) {
+        console.warn(`[deleteUserAccount] profile photo delete failed for ${uid}:`, err);
+      }
 
-  await getAuth().deleteUser(uid);
-  return { ok: true };
-});
+      await userRef.set(
+        {
+          displayName: 'Deleted user',
+          accountStatus: 'deleted',
+          email: FieldValue.delete(),
+          familyId: FieldValue.delete(),
+          profilePhotoUrl: FieldValue.delete(),
+          partnerWellnessSnapshot: FieldValue.delete(),
+          volunteerCatalogId: FieldValue.delete(),
+          volunteerOnline: false,
+          updatedAt: FieldValue.serverTimestamp(),
+        },
+        { merge: true },
+      );
+
+      await getAuth().deleteUser(uid);
+      return { ok: true };
+    } catch (err) {
+      console.error(`[deleteUserAccount] failed for ${uid}:`, err);
+      if (err instanceof HttpsError) throw err;
+      throw new HttpsError(
+        'internal',
+        err?.message
+          ? `Account deletion failed: ${err.message}`
+          : 'Account deletion failed. Please try again.',
+      );
+    }
+  },
+);

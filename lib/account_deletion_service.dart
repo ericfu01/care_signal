@@ -12,9 +12,17 @@ class AccountDeletionService {
       throw StateError('Sign in to delete your account.');
     }
 
-    final callable =
-        FirebaseFunctions.instance.httpsCallable('deleteUserAccount');
+    final callable = FirebaseFunctions.instanceFor(region: 'us-central1')
+        .httpsCallable(
+      'deleteUserAccount',
+      options: HttpsCallableOptions(
+        timeout: const Duration(seconds: 120),
+      ),
+    );
     await callable.call<Map<String, dynamic>>({});
-    await FirebaseAuth.instance.signOut();
+    // Auth user is already deleted by the Cloud Function; clear local session.
+    try {
+      await FirebaseAuth.instance.signOut();
+    } catch (_) {}
   }
 }
